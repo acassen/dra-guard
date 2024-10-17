@@ -1,0 +1,5 @@
+# make and build files
+*.o
+bin/dra-guard
+*.bpf
+*.ll
