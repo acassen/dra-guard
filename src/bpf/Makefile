@@ -1,12 +1,12 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later 
 #
 # Soft:        The main goal of dra-guard is to provide robust and secure
 #              extensions to DRA feature (Diameter Routing Agent). DRA are
-#              used in mobile networks in order to redirect users terminals
-#              to their HPLMN in Roaming situations. DRA-Guard implements a
-#              set of features to manipulate and analyze Diameter payloads
-#              via a Plugin framework and a built-in Route-Optimization
-#              feature.
+#              used in mobile networks to route Diameter traffic between
+#              mobile network equipments, like at Roaming interconnections.
+#              DRA-Guard implements a set of features to manipulate and
+#              analyze Diameter payloads via a Plugin framework and a
+#              built-in Route-Optimization feature.
 #
 # Authors:     Alexandre Cassen, <acassen@gmail.com>
 #
