@@ -15,11 +15,11 @@ DRA-Guard is designed for high perf and built around an asynchronous multi-threa
 DRA-Guard is additionnaly implementing a "Route Optimization" framework, a short static example is offered as an example in this OpenSource version, but way more advanced and dynamic routing decisions can be implemented based on multi-metrics.
 
 # Network Architecture
-DRA-Guard sits directly at interconnection :
+If it can be inserted anywhere in your network, it can be useful at interconnection point where you may want to have option to quickly add perf extensions (monitoring, reporting, mitigation, filtering, ...)
 <p align="center"><img src="https://www.dra-guard.org/assets/arch-net.png"></p>
 
 # Software Architecture
-If it can be inserted anywhere in your network, it can be useful at interconnection point where you may want to have option to quickly add perf extensions (monitoring, reporting, mitigation, filtering, ...)
+DRA-Guard is articulated around following components :
 <p align="center"><img src="https://www.dra-guard.org/assets/arch-soft.png"></p>
 
 # Local Stack Packet re-circulation
