@@ -11,7 +11,7 @@ DRA-Guard is a routing software written in C. The main goal of this project is t
 DRA-Guard is free software; you can redistribute it and/or modify it under the terms of the GNU Affero General Public License Version 3.0 as published by the Free Software Foundation.
 
 
-[<img width=20% src="images/download.png">](software/dra-guard-latest.tar.xz)
+[<img width=20% src="images/github.png">](https://github.com/acassen/dra-guard)
 
 ---
 

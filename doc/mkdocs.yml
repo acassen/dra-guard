@@ -11,11 +11,6 @@ theme:
     - toc.integrate
     - header.autohide
   palette:
-    - scheme: slate
-      primary: orange
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
     - scheme: default
       primary: orange
       toggle:
