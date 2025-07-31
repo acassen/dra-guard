@@ -356,6 +356,7 @@ dra_sctp_read(thread_ref_t thread)
 	dra_sctp_proxy_t *p;
 	ssize_t nbytes;
 	int fd, flags = 0, action;
+	bool pkt_full = false;
 
 	/* Fetch thread elements */
 	fd = THREAD_FD(thread);
@@ -392,9 +393,13 @@ dra_sctp_read(thread_ref_t thread)
 	if (thread->u.f.flags == SCTP_FL_INGRESS) {
 		__clear_bit(SCTP_FL_COMPLETE, &a->ingress.flags);
 		nbytes = dra_sctp_recvmsg(fd, a->ingress.pkt, &a->ingress.sinfo, &flags);
+		if (pkt_buffer_tailroom(a->ingress.pkt) <= 0)
+			pkt_full = true;
 	} else {
 		__clear_bit(SCTP_FL_COMPLETE, &a->egress.flags);
 		nbytes = dra_sctp_recvmsg(fd, a->egress.pkt, &a->egress.sinfo, &flags);
+		if (pkt_buffer_tailroom(a->egress.pkt) <= 0)
+			pkt_full = true;
 	}
 
 	if (nbytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
@@ -437,8 +442,10 @@ dra_sctp_read(thread_ref_t thread)
 			a->ingress.r_thread = NULL;
 			pkt_buffer_reset_data(a->ingress.pkt);
 
-			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->ingress.flags))
+			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->ingress.flags)) {
+				pkt_buffer_reset(a->ingress.pkt);
 				goto next_read;
+			}
 
 			action = dra_sctp_plugin_run(DRA_PLUGIN_INGRESS_READ_HOOK, a->ingress.pkt, w);
 			if (action == DRA_PLUGIN_ACT_DROP)
@@ -456,8 +463,10 @@ dra_sctp_read(thread_ref_t thread)
 			a->egress.r_thread = NULL;
 			pkt_buffer_reset_data(a->egress.pkt);
 
-			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->egress.flags))
+			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->egress.flags)) {
+				pkt_buffer_reset(a->egress.pkt);
 				goto next_read;
+			}
 
 			action = dra_sctp_plugin_run(DRA_PLUGIN_EGRESS_READ_HOOK, a->egress.pkt, w);
 			if (action == DRA_PLUGIN_ACT_DROP)
@@ -474,20 +483,22 @@ dra_sctp_read(thread_ref_t thread)
 		return;
 	}
 
-	/* pkt full and no MSG_EOR means need more room ! discard pkt too big... */
-	if (thread->u.f.flags == SCTP_FL_INGRESS) {
-		__set_bit(SCTP_FL_DISCARD, &a->ingress.flags);
-		pkt_buffer_reset_data(a->ingress.pkt);
-	} else {
-		__set_bit(SCTP_FL_DISCARD, &a->egress.flags);
-		pkt_buffer_reset_data(a->egress.pkt);
-	}
+	if (pkt_full) {
+		/* pkt full and no MSG_EOR means need more room ! discard pkt too big... */
+		if (thread->u.f.flags == SCTP_FL_INGRESS) {
+			__set_bit(SCTP_FL_DISCARD, &a->ingress.flags);
+			pkt_buffer_reset(a->ingress.pkt);
+		} else {
+			__set_bit(SCTP_FL_DISCARD, &a->egress.flags);
+			pkt_buffer_reset(a->egress.pkt);
+		}
 
-	log_message(LOG_INFO, "%s(): #%d %s pkt need more room for remote peer [%s] discarding..."
-				, __FUNCTION__
-				, w->id
-				, (thread->u.f.flags == SCTP_FL_INGRESS) ? "ingress" : "egress"
-				, a->addrs_str);
+		log_message(LOG_INFO, "%s(): #%d %s pkt need more room for remote peer [%s] discarding..."
+					, __FUNCTION__
+					, w->id
+					, (thread->u.f.flags == SCTP_FL_INGRESS) ? "ingress" : "egress"
+					, a->addrs_str);
+	}
 
   next_read:
 	if (thread->u.f.flags == SCTP_FL_INGRESS)
