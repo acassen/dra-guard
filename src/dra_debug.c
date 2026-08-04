@@ -161,14 +161,14 @@ dra_debug_vty(vty_t *vty, dra_htab_t *h)
 	uint64_t i;
 
 	for (i = 0; i < DEBUG_HASHTAB_SIZE; i++) {
-		dlock_lock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_lock_bucket(h->dlock, i);
 		hlist_for_each_entry(e, n, &h->htab[i], hlist) {
 			if (__test_bit(DRA_DEBUG_FL_VTY, &e->flags)) {
 				vty_out(vty, " msisdn %ld mip6-agent-info %s%s"
 					   , e->msisdn, e->mip->name, VTY_NEWLINE);
 			}
 		}
-		dlock_unlock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_unlock_bucket(h->dlock, i);
 	}
 
 	return 0;
@@ -184,7 +184,7 @@ dra_debug_json(json_writer_t *jwriter, dra_htab_t *h)
 	jsonw_name(jwriter, "target");
 	jsonw_start_array(jwriter);
 	for (i = 0; i < DEBUG_HASHTAB_SIZE; i++) {
-		dlock_lock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_lock_bucket(h->dlock, i);
 		hlist_for_each_entry(e, n, &h->htab[i], hlist) {
 			if (__test_bit(DRA_DEBUG_FL_JSON, &e->flags)) {
 				jsonw_start_object(jwriter);
@@ -195,7 +195,7 @@ dra_debug_json(json_writer_t *jwriter, dra_htab_t *h)
 				jsonw_end_object(jwriter);
 			}
 		}
-		dlock_unlock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_unlock_bucket(h->dlock, i);
 	}
 	jsonw_end_array(jwriter);
 
@@ -265,14 +265,14 @@ dra_debug_disk_write_entries(dra_htab_t *h, char *path)
 	}
 
 	for (i = 0; i < DEBUG_HASHTAB_SIZE; i++) {
-		dlock_lock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_lock_bucket(h->dlock, i);
 		hlist_for_each_entry(e, n, &h->htab[i], hlist) {
 			if (__test_bit(DRA_DEBUG_FL_JSON, &e->flags)) {
 				dra_disk_write(fd, (char *) &e->msisdn, sizeof(uint64_t));
 				dra_disk_write(fd, e->mip->name, MIP_NAME_MAX_LEN);
 			}
 		}
-		dlock_unlock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_unlock_bucket(h->dlock, i);
 	}
 
 	close(fd);
@@ -294,12 +294,12 @@ dra_debug_destroy(dra_htab_t *h)
 	uint64_t i;
 
 	for (i = 0; i < DEBUG_HASHTAB_SIZE; i++) {
-		dlock_lock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_lock_bucket(h->dlock, i);
 		hlist_for_each_entry_safe(e, n, n2, &h->htab[i], hlist) {
 			__dra_debug_entry_unhash(h, e);
 			FREE(e);
 		}
-		dlock_unlock_id(h->dlock, (uint32_t) i, (uint32_t) (i >> 32));
+		dlock_unlock_bucket(h->dlock, i);
 	}
 
 	dra_htab_destroy(h);

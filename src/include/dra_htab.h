@@ -29,7 +29,6 @@
 
 typedef struct _dlock_mutex {
 	pthread_mutex_t		mutex;
-	uint32_t		refcnt;
 } dlock_mutex_t;
 
 /* htab */
@@ -41,6 +40,8 @@ typedef struct _dra_htab {
 /* Prototypes */
 extern int dlock_lock_id(dlock_mutex_t *, uint32_t, uint32_t);
 extern int dlock_unlock_id(dlock_mutex_t *, uint32_t, uint32_t);
+extern int dlock_lock_bucket(dlock_mutex_t *, uint32_t);
+extern int dlock_unlock_bucket(dlock_mutex_t *, uint32_t);
 extern dlock_mutex_t *dlock_init(void);
 extern int dlock_destroy(dlock_mutex_t *);
 extern void dra_htab_init(dra_htab_t *, size_t);

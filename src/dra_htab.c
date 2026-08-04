@@ -44,18 +44,34 @@ dlock_hash(dlock_mutex_t *__array, uint32_t w1, uint32_t w2)
 int
 dlock_lock_id(dlock_mutex_t *__array, uint32_t w1, uint32_t w2)
 {
-	dlock_mutex_t *m = dlock_hash(__array, w1, w2);
-	pthread_mutex_lock(&m->mutex);
-	__sync_add_and_fetch(&m->refcnt, 1);
+	pthread_mutex_lock(&dlock_hash(__array, w1, w2)->mutex);
 	return 0;
 }
 
 int
 dlock_unlock_id(dlock_mutex_t *__array, uint32_t w1, uint32_t w2)
 {
-	dlock_mutex_t *m = dlock_hash(__array, w1, w2);
-	if (__sync_sub_and_fetch(&m->refcnt, 1) == 0)
-		pthread_mutex_unlock(&m->mutex);
+	pthread_mutex_unlock(&dlock_hash(__array, w1, w2)->mutex);
+	return 0;
+}
+
+/*
+ * Walkers hold a whole bucket instead of a single id. An entry lands in
+ * bucket jhash(id) & HTAB_MASK and locks jhash(id) & DLOCK_MASK, and the
+ * dlock mask is a subset of the htab mask, so masking the bucket index
+ * yields the very mutex every entry in it takes.
+ */
+int
+dlock_lock_bucket(dlock_mutex_t *__array, uint32_t idx)
+{
+	pthread_mutex_lock(&__array[idx & DLOCK_HASHTAB_MASK].mutex);
+	return 0;
+}
+
+int
+dlock_unlock_bucket(dlock_mutex_t *__array, uint32_t idx)
+{
+	pthread_mutex_unlock(&__array[idx & DLOCK_HASHTAB_MASK].mutex);
 	return 0;
 }
 
@@ -63,13 +79,26 @@ dlock_mutex_t *
 dlock_init(void)
 {
 	dlock_mutex_t *new;
+	int i;
+
 	new = (dlock_mutex_t *) MALLOC(DLOCK_HASHTAB_SIZE * sizeof(dlock_mutex_t));
+	if (!new)
+		return NULL;
+
+	for (i = 0; i < DLOCK_HASHTAB_SIZE; i++)
+		pthread_mutex_init(&new[i].mutex, NULL);
+
         return new;
 }
 
 int
 dlock_destroy(dlock_mutex_t *__array)
 {
+	int i;
+
+	for (i = 0; i < DLOCK_HASHTAB_SIZE; i++)
+		pthread_mutex_destroy(&__array[i].mutex);
+
 	FREE(__array);
 	return 0;
 }
