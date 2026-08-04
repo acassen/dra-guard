@@ -454,8 +454,10 @@ dra_sctp_read(thread_ref_t thread)
 			}
 
 			action = dra_sctp_plugin_run(DRA_PLUGIN_INGRESS_READ_HOOK, a->ingress.pkt, w);
-			if (action == DRA_PLUGIN_ACT_DROP)
+			if (action == DRA_PLUGIN_ACT_DROP) {
+				pkt_buffer_reset(a->ingress.pkt);
 				goto next_read;
+			}
 
 			/* Built-in feature */
 			dra_route_optimization(a->ingress.pkt, w, NULL);
@@ -475,8 +477,10 @@ dra_sctp_read(thread_ref_t thread)
 			}
 
 			action = dra_sctp_plugin_run(DRA_PLUGIN_EGRESS_READ_HOOK, a->egress.pkt, w);
-			if (action == DRA_PLUGIN_ACT_DROP)
+			if (action == DRA_PLUGIN_ACT_DROP) {
+				pkt_buffer_reset(a->egress.pkt);
 				goto next_read;
+			}
 
 			/* Built-in feature */
 			dra_route_optimization(a->egress.pkt, w, NULL);
