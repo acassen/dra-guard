@@ -575,9 +575,15 @@ dra_sctp_connect(thread_ref_t thread)
 	if (__test_bit(SCTP_FL_LOCAL_NAT, &p->flags))
 		dra_sctp_assoc_nat(p, a->addrs, a->addrs_cnt);
 
-	/* Bind to local */
+	/* Bind to local. Transparent mode binds the egress socket to the
+	 * ingress peer addresses, so this is where a NAT misconfiguration
+	 * shows up */
 	err = sctp_bindx(fd, a->addrs, a->addrs_cnt, SCTP_BINDX_ADD_ADDR);
 	if (err) {
+		log_message(LOG_INFO, "%s(): #%d error binding egress socket to [%s] (%m)"
+				    , __FUNCTION__
+				    , w->id
+				    , a->addrs_str);
 		dra_sctp_assoc_free(a);
 		return;
 	}
@@ -601,6 +607,10 @@ dra_sctp_connect(thread_ref_t thread)
 
 	if (socket_connection_state(fd, sctp_status, thread, sctp_check_thread, DRA_SCTP_TIMEOUT)) {
 		/* connect_error or connect_failt */
+		log_message(LOG_INFO, "%s(): #%d error registering egress connection to [%s]"
+				    , __FUNCTION__
+				    , w->id
+				    , p->connect_addrs_str);
 		dra_sctp_assoc_free(a);
         }
 }
@@ -695,8 +705,12 @@ dra_sctp_listen(dra_sctp_worker_t *w)
 
 	/* SCTP Initmsg*/
 	err = if_setsockopt_sctp_initmsg(fd, &p->server_initmsg);
-	if (err < 0)
-		return -1;
+	if (err < 0) {
+		log_message(LOG_INFO, "%s(): error setting sctp_initmsg on '%s' (%m)"
+				    , __FUNCTION__
+				    , p->name);
+		goto error;
+	}
 
 #if 0
 	/* SCTP I/O event subscribe */
