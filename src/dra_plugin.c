@@ -57,8 +57,10 @@ dra_plugin_get(const char *name)
 	pthread_mutex_lock(&dra_plugin_mutex);
 	list_for_each_entry(plugin, l, next) {
 		if (!strncmp(name, plugin->name, DRA_NAME_MAX_LEN)) {
-			pthread_mutex_unlock(&dra_plugin_mutex);
+			/* Reference before dropping the lock, a concurrent
+			 * release must not free it under us */
 			__sync_add_and_fetch(&plugin->refcnt, 1);
+			pthread_mutex_unlock(&dra_plugin_mutex);
 			return plugin;
 		}
 	}
@@ -202,13 +204,18 @@ __dra_plugin_release(dra_plugin_t *plugin)
 int
 dra_plugin_release(dra_plugin_t *plugin)
 {
-	if (__sync_add_and_fetch(&plugin->refcnt, 0) != 0)
-		return -1;
+	int err = -1;
 
+	/* Test and free under the same lock dra_plugin_get() holds, or a
+	 * lookup landing in between hands out a plugin about to be dlclosed */
 	pthread_mutex_lock(&dra_plugin_mutex);
-	__dra_plugin_release(plugin);
+	if (__sync_add_and_fetch(&plugin->refcnt, 0) == 0) {
+		__dra_plugin_release(plugin);
+		err = 0;
+	}
 	pthread_mutex_unlock(&dra_plugin_mutex);
-	return 0;
+
+	return err;
 }
 
 int

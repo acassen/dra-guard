@@ -47,71 +47,51 @@ extern data_t *daemon_data;
  */
 
 int
-dra_sctp_proxy_plugin_get(dra_sctp_plugin_t *p)
-{
-	__sync_add_and_fetch(&p->refcnt, 1);
-	return 0;
-}
-
-int
-dra_sctp_proxy_plugin_put(dra_sctp_plugin_t *p)
-{
-	if (__sync_sub_and_fetch(&p->refcnt, 1) == 0 &&
-	    __test_bit(SCTP_FL_PLUGIN_UNLOAD, &p->flags)) {
-		dra_plugin_put(p->plugin);
-		p->plugin = NULL;
-		p->flags = 0;
-	}
-
-	return 0;
-}
-
-
-int
 dra_sctp_proxy_plugin_add(dra_sctp_proxy_t *p, dra_plugin_t *plugin)
 {
-	int i;
+	int i, err = -1;
 
+	pthread_rwlock_wrlock(&p->plugin_lock);
 	for (i = 0; i < DRA_SCTP_MAX_PLUGIN; i++) {
 		if (p->plugin[i].plugin)
 			continue;
 
 		p->plugin[i].plugin = plugin;
-		__sync_add_and_fetch(&p->plugin_cnt, 1);
+		p->plugin_cnt++;
 		__set_bit(SCTP_FL_PLUGIN_LOADED, &p->flags);
-		return 0;
+		err = 0;
+		break;
 	}
+	pthread_rwlock_unlock(&p->plugin_lock);
 
-	return -1;
+	return err;
 }
 
 int
 dra_sctp_proxy_plugin_del(dra_sctp_proxy_t *p, const char *name)
 {
-	int i;
+	int i, err = -1;
 
-	if (!__test_bit(SCTP_FL_PLUGIN_LOADED, &p->flags))
-		return -1;
-
+	/* The write side waits for in-flight callbacks, so the slot is never
+	 * cleared under a worker that is running the plugin */
+	pthread_rwlock_wrlock(&p->plugin_lock);
 	for (i = 0; i < DRA_SCTP_MAX_PLUGIN; i++) {
 		if (!p->plugin[i].plugin)
 			continue;
 
-		if (!strncmp(p->plugin[i].plugin->name, name, DRA_NAME_MAX_LEN)) {
-			if (__sync_sub_and_fetch(&p->plugin_cnt, 1) == 0)
-				__clear_bit(SCTP_FL_PLUGIN_LOADED, &p->flags);
-			
-			__set_bit(SCTP_FL_PLUGIN_UNLOAD, &p->plugin[i].flags);
-			if (__sync_add_and_fetch(&p->plugin[i].refcnt, 0) == 0) {
-				dra_plugin_put(p->plugin[i].plugin);
-				p->plugin[i].plugin = NULL;
-				p->plugin[i].flags = 0;
-			}
-			return 0;
-		}
-	}
+		if (strncmp(p->plugin[i].plugin->name, name, DRA_NAME_MAX_LEN))
+			continue;
 
-	return -1;
+		dra_plugin_put(p->plugin[i].plugin);
+		p->plugin[i].plugin = NULL;
+		if (!--p->plugin_cnt)
+			__clear_bit(SCTP_FL_PLUGIN_LOADED, &p->flags);
+		err = 0;
+		break;
+	}
+	pthread_rwlock_unlock(&p->plugin_lock);
+
+	return err;
 }
 
 
@@ -202,6 +182,7 @@ dra_sctp_proxy_alloc(const char *name)
 	new->thread_cnt = SCTP_LISTENER_THREAD_CNT_DEFAULT;
 	pthread_mutex_init(&new->workers_mutex, NULL);
 	pthread_mutex_init(&new->assocs_mutex, NULL);
+	pthread_rwlock_init(&new->plugin_lock, NULL);
         list_add_tail(&new->next, &daemon_data->sctp_proxys);
 
 	return new;

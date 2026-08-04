@@ -86,37 +86,32 @@ dra_sctp_plugin_run(int hook, pkt_buffer_t *pkt, dra_sctp_worker_t *w)
 {
 	dra_sctp_proxy_t *p = w->proxy;
 	dra_plugin_t *plugin;
-	int i, action;
+	int i, action = DRA_PLUGIN_ACT_PASS;
 
+	/* Read side, so workers still run plugins concurrently. An unload
+	 * takes the write side and cannot unmap a callback mid-flight */
+	pthread_rwlock_rdlock(&p->plugin_lock);
 	for (i = 0; i < DRA_SCTP_MAX_PLUGIN && p->plugin[i].plugin; i++) {
 		plugin = p->plugin[i].plugin;
 
-		if (plugin->generic_pkt) {
-			dra_sctp_proxy_plugin_get(&p->plugin[i]);
+		if (plugin->generic_pkt)
 			action = (*plugin->generic_pkt) (pkt);
-			dra_sctp_proxy_plugin_put(&p->plugin[i]);
-			if (action == DRA_PLUGIN_ACT_DROP)
-				return DRA_PLUGIN_ACT_DROP;
-		}
+		if (action == DRA_PLUGIN_ACT_DROP)
+			break;
 
-		if (plugin->ingress_pkt_read && hook == DRA_PLUGIN_INGRESS_READ_HOOK) {
-			dra_sctp_proxy_plugin_get(&p->plugin[i]);
+		if (plugin->ingress_pkt_read && hook == DRA_PLUGIN_INGRESS_READ_HOOK)
 			action = (*plugin->ingress_pkt_read) (pkt);
-			dra_sctp_proxy_plugin_put(&p->plugin[i]);
-			if (action == DRA_PLUGIN_ACT_DROP)
-				return DRA_PLUGIN_ACT_DROP;
-		}
+		if (action == DRA_PLUGIN_ACT_DROP)
+			break;
 
-		if (plugin->egress_pkt_read && hook == DRA_PLUGIN_EGRESS_READ_HOOK) {
-			dra_sctp_proxy_plugin_get(&p->plugin[i]);
+		if (plugin->egress_pkt_read && hook == DRA_PLUGIN_EGRESS_READ_HOOK)
 			action = (*plugin->egress_pkt_read) (pkt);
-			dra_sctp_proxy_plugin_put(&p->plugin[i]);
-			if (action == DRA_PLUGIN_ACT_DROP)
-				return DRA_PLUGIN_ACT_DROP;
-		}
+		if (action == DRA_PLUGIN_ACT_DROP)
+			break;
 	}
+	pthread_rwlock_unlock(&p->plugin_lock);
 
-	return DRA_PLUGIN_ACT_PASS;
+	return action;
 }
 
 

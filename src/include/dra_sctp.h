@@ -45,7 +45,6 @@ enum assoc_flags {
 	SCTP_FL_REWRITE_ULA,
 	SCTP_FL_MATCH_TARGET_REWRITE_ULA,
 	SCTP_FL_PLUGIN_LOADED,
-	SCTP_FL_PLUGIN_UNLOAD,
 };
 
 /* SCTP channel */
@@ -69,9 +68,6 @@ typedef struct _dra_sctp_worker {
 
 typedef struct _dra_sctp_plugin {
 	dra_plugin_t		*plugin;
-	int			refcnt;
-
-	unsigned long		flags;
 } dra_sctp_plugin_t;
 
 typedef struct _dra_sctp_proxy {
@@ -99,6 +95,9 @@ typedef struct _dra_sctp_proxy {
 	pthread_mutex_t		assocs_mutex;
 	list_head_t		assocs;
 
+	/* Read side is the datapath, write side is a VTY load or unload and
+	 * therefore waits for in-flight callbacks to return */
+	pthread_rwlock_t	plugin_lock;
 	dra_sctp_plugin_t	plugin[DRA_SCTP_MAX_PLUGIN];
 	int			plugin_cnt;
 
@@ -136,8 +135,6 @@ typedef struct _dra_sctp_assoc {
 
 
 /* Prototypes */
-extern int dra_sctp_proxy_plugin_get(dra_sctp_plugin_t *);
-extern int dra_sctp_proxy_plugin_put(dra_sctp_plugin_t *);
 extern int dra_sctp_proxy_plugin_add(dra_sctp_proxy_t *, dra_plugin_t *);
 extern int dra_sctp_proxy_plugin_del(dra_sctp_proxy_t *, const char *);
 extern int sctp_assoc_str(struct sockaddr *, int, char *, size_t);
