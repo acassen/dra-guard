@@ -1461,6 +1461,24 @@ thread_add_signal(thread_master_t *m, thread_func_t func, void *arg, int signum)
 }
 #endif
 
+/*
+ * A dispatched thread is already off its ready list, and the dispatch loop
+ * parks it once the callback returns. Do the epoll cleanup, then leave the
+ * running thread alone or it lands on the free list mid callback.
+ */
+static bool
+thread_cancel_ready(thread_master_t *m, thread_t *thread, unsigned epoll_bit)
+{
+	if (epoll_bit && thread->event)
+		thread_event_del(thread, epoll_bit);
+
+	if (m->current_thread == thread)
+		return false;
+
+	list_del_init(&thread->e_list);
+	return true;
+}
+
 /* Cancel thread from scheduler. */
 void
 thread_cancel(thread_ref_t thread_cp)
@@ -1496,16 +1514,14 @@ thread_cancel(thread_ref_t thread_cp)
 	case THREAD_READY_READ_FD:
 	case THREAD_READ_TIMEOUT:
 	case THREAD_READ_ERROR:
-		if (thread->event)
-			thread_event_del(thread, THREAD_FL_EPOLL_READ_BIT);
-		list_del_init(&thread->e_list);
+		if (!thread_cancel_ready(m, thread, THREAD_FL_EPOLL_READ_BIT))
+			return;
 		break;
 	case THREAD_READY_WRITE_FD:
 	case THREAD_WRITE_TIMEOUT:
 	case THREAD_WRITE_ERROR:
-		if (thread->event)
-			thread_event_del(thread, THREAD_FL_EPOLL_WRITE_BIT);
-		list_del_init(&thread->e_list);
+		if (!thread_cancel_ready(m, thread, THREAD_FL_EPOLL_WRITE_BIT))
+			return;
 		break;
 	case THREAD_EVENT:
 	case THREAD_READY:
@@ -1515,7 +1531,8 @@ thread_cancel(thread_ref_t thread_cp)
 #endif
 	case THREAD_CHILD_TIMEOUT:
 	case THREAD_CHILD_TERMINATED:
-		list_del_init(&thread->e_list);
+		if (!thread_cancel_ready(m, thread, 0))
+			return;
 		break;
 	case THREAD_TIMER_SHUTDOWN:
 	case THREAD_TERMINATE_START:
