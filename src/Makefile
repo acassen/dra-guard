@@ -23,7 +23,7 @@ CC	 ?= gcc
 INCLUDES = -Iinclude -I../lib -I../libbpf/src -I../libbpf/src/uapi
 WARNINGS = -Werror -Wall -Wextra -Wno-unused-parameter -Wunused		\
 	   -Wstrict-prototypes -Wformat=2 -Wno-format-nonliteral	\
-	   -Wcast-align -Wduplicated-cond
+	   -Wcast-align -Wnull-dereference -Wduplicated-cond
 HARDENING = -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE
 CFLAGS	 = -g -O2 -ggdb $(INCLUDES) $(WARNINGS) $(HARDENING) -D_GNU_SOURCE
 #DEFS	 = -D_DEBUG_

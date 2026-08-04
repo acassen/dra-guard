@@ -27,6 +27,11 @@ void list_sort(struct list_head *head,
 	struct list_head *p, *q, *e, *list, *tail, *oldhead;
 	int insize, nmerges, psize, qsize, i;
 
+	/* Nothing to merge, and the pass below would relink through a NULL
+	 * list and tail */
+	if (list_empty(head))
+		return;
+
 	list = head->next;
 	list_head_del(head);
 	insize = 1;
@@ -84,6 +89,11 @@ void list_sort(struct list_head *head,
 			p = q;
 		}
 
+		/* p was non NULL so the merge always assigned tail, the test
+		 * states that invariant rather than leaving it implied */
+		if (!tail)
+			break;
+
 		tail->next = list;
 		list->prev = tail;
 
@@ -91,6 +101,11 @@ void list_sort(struct list_head *head,
 			break;
 
 		insize *= 2;
+	}
+
+	if (!list) {
+		INIT_LIST_HEAD(head);
+		return;
 	}
 
 	head->next = list;

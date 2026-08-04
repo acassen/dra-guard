@@ -23,7 +23,7 @@ CC	 ?= gcc
 INCLUDES = -I.
 WARNINGS = -Werror -Wall -Wextra -Wno-unused-parameter -Wunused		\
 	   -Wstrict-prototypes -Wformat=2 -Wno-format-nonliteral	\
-	   -Wcast-align -Wduplicated-cond
+	   -Wcast-align -Wnull-dereference -Wduplicated-cond
 HARDENING = -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE
 CFLAGS	 = -g -O2 $(INCLUDES) $(WARNINGS) $(HARDENING)
 #DEFS	 = -D_DEBUG_
