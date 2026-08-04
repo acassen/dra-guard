@@ -266,10 +266,10 @@ dra_sctp_sendmsg(int fd, pkt_buffer_t *pkt, struct sctp_sndrcvinfo *sinfo)
 static void
 dra_sctp_write(thread_ref_t thread)
 {
+	dra_sctp_peer_t *src, *dst;
 	dra_sctp_assoc_t *a;
 	dra_sctp_worker_t *w;
 	dra_sctp_proxy_t *p;
-	pkt_buffer_t *pkt;
 	ssize_t nbytes;
 	int fd;
 
@@ -278,6 +278,11 @@ dra_sctp_write(thread_ref_t thread)
 	a = THREAD_ARG(thread);
 	w = a->worker;
 	p = w->proxy;
+
+	/* The flag names the side the payload came from, so it is sent out of
+	 * the opposite socket */
+	src = (thread->u.f.flags == SCTP_FL_INGRESS) ? &a->ingress : &a->egress;
+	dst = (thread->u.f.flags == SCTP_FL_INGRESS) ? &a->egress : &a->ingress;
 
 	/* Error Handling */
 	if (thread->type == THREAD_WRITE_ERROR) {
@@ -295,13 +300,7 @@ dra_sctp_write(thread_ref_t thread)
 		return;
 	}
 
-	if (thread->u.f.flags == SCTP_FL_INGRESS) {
-		pkt = a->ingress.pkt;
-		nbytes = dra_sctp_sendmsg(fd, pkt, &a->ingress.sinfo);
-	} else {
-		pkt = a->egress.pkt;
-		nbytes = dra_sctp_sendmsg(fd, pkt, &a->egress.sinfo);
-	}
+	nbytes = dra_sctp_sendmsg(fd, src->pkt, &src->sinfo);
 
 	if (nbytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		goto next_write;
@@ -311,59 +310,48 @@ dra_sctp_write(thread_ref_t thread)
 		return;
 	}
 
-	if (!pkt_buffer_data_tailroom(pkt)) {
+	/* Buffer fully sent, resume reading the side it came from */
+	if (!pkt_buffer_data_tailroom(src->pkt)) {
 #if 0
 		printf("---[ Buffer sent ]----\n");
-		if (thread->u.f.flags == SCTP_FL_INGRESS)
-			dump_buffer("sent-egress ", (char *) a->ingress.pkt->head, pkt_buffer_len(a->ingress.pkt));
-		else
-			dump_buffer("sent-ingress ", (char *) a->egress.pkt->head, pkt_buffer_len(a->egress.pkt));
+		dump_buffer("sent ", (char *) src->pkt->head, pkt_buffer_len(src->pkt));
 #endif
+		thread_del_write(dst->w_thread);
+		dst->w_thread = NULL;
+		pkt_buffer_reset(src->pkt);
 
-		/* Complete */
-		if (thread->u.f.flags == SCTP_FL_INGRESS) {
-			thread_del_write(a->egress.w_thread);
-			a->egress.w_thread = NULL;
-			pkt_buffer_reset(a->ingress.pkt);
-
-			a->ingress.r_thread = thread_add_read(thread->master, dra_sctp_read, a,
-							      a->ingress.fd, DRA_SCTP_TIMEOUT, SCTP_FL_INGRESS);
-		} else {
-			thread_del_write(a->ingress.w_thread);
-			a->ingress.w_thread = NULL;
-			pkt_buffer_reset(a->egress.pkt);
-
-			a->egress.r_thread = thread_add_read(thread->master, dra_sctp_read, a,
-							     a->egress.fd , DRA_SCTP_TIMEOUT, SCTP_FL_EGRESS);
-		}
-
+		src->r_thread = thread_add_read(thread->master, dra_sctp_read, a,
+						src->fd, DRA_SCTP_TIMEOUT,
+						thread->u.f.flags);
 		return;
 	}
 
   next_write:
-	if (thread->u.f.flags == SCTP_FL_INGRESS)
-		a->egress.w_thread = thread_add_write(thread->master, dra_sctp_write, a, fd,
-						      DRA_SCTP_TIMEOUT, SCTP_FL_INGRESS);
-	else
-		a->ingress.w_thread = thread_add_write(thread->master, dra_sctp_write, a, fd,
-						       DRA_SCTP_TIMEOUT, SCTP_FL_EGRESS);
+	dst->w_thread = thread_add_write(thread->master, dra_sctp_write, a, fd,
+					 DRA_SCTP_TIMEOUT, thread->u.f.flags);
 }
 
 static void
 dra_sctp_read(thread_ref_t thread)
 {
 	dra_sctp_assoc_t *a;
+	dra_sctp_peer_t *src, *dst;
 	dra_sctp_worker_t *w;
 	dra_sctp_proxy_t *p;
+	bool ingress;
 	ssize_t nbytes;
 	int fd, flags = 0, action;
-	bool pkt_full = false;
 
 	/* Fetch thread elements */
 	fd = THREAD_FD(thread);
 	a = THREAD_ARG(thread);
 	w = a->worker;
 	p = w->proxy;
+
+	/* Payload read here leaves through the opposite socket */
+	ingress = (thread->u.f.flags == SCTP_FL_INGRESS);
+	src = ingress ? &a->ingress : &a->egress;
+	dst = ingress ? &a->egress : &a->ingress;
 
 	/* Error Handling */
 	if (thread->type == THREAD_READ_ERROR) {
@@ -373,35 +361,19 @@ dra_sctp_read(thread_ref_t thread)
 
 	/* Timeout handling */
 	if (thread->type == THREAD_READ_TIMEOUT) {
-		if (thread->u.f.flags == SCTP_FL_INGRESS &&
-		    __test_bit(SCTP_FL_COMPLETE, &a->ingress.flags))
-			goto next_read;
-
-		if (thread->u.f.flags == SCTP_FL_EGRESS &&
-		    __test_bit(SCTP_FL_COMPLETE, &a->egress.flags))
+		if (__test_bit(SCTP_FL_COMPLETE, &src->flags))
 			goto next_read;
 
 		log_message(LOG_INFO, "%s(): #%d Timeout while reading data from remote peer [%s]"
 				    , __FUNCTION__
 				    , w->id
-				    , (thread->u.f.flags == SCTP_FL_INGRESS) ? a->addrs_str :
-				    					       p->connect_addrs_str);
+				    , ingress ? a->addrs_str : p->connect_addrs_str);
 		dra_sctp_assoc_free(a);
 		return;
 	}
 
-
-	if (thread->u.f.flags == SCTP_FL_INGRESS) {
-		__clear_bit(SCTP_FL_COMPLETE, &a->ingress.flags);
-		nbytes = dra_sctp_recvmsg(fd, a->ingress.pkt, &a->ingress.sinfo, &flags);
-		if (pkt_buffer_tailroom(a->ingress.pkt) <= 0)
-			pkt_full = true;
-	} else {
-		__clear_bit(SCTP_FL_COMPLETE, &a->egress.flags);
-		nbytes = dra_sctp_recvmsg(fd, a->egress.pkt, &a->egress.sinfo, &flags);
-		if (pkt_buffer_tailroom(a->egress.pkt) <= 0)
-			pkt_full = true;
-	}
+	__clear_bit(SCTP_FL_COMPLETE, &src->flags);
+	nbytes = dra_sctp_recvmsg(fd, src->pkt, &src->sinfo, &flags);
 
 	if (nbytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		goto next_read;
@@ -431,87 +403,50 @@ dra_sctp_read(thread_ref_t thread)
 	if (flags & MSG_EOR) {
 #if 0
 		printf("----[ Incoming buffer ]----\n");
-		if (thread->u.f.flags == SCTP_FL_INGRESS)
-			dump_buffer("recv-ingress ", (char *) a->ingress.pkt->head, pkt_buffer_len(a->ingress.pkt));
-		else
-			dump_buffer("recv-egress ", (char *) a->egress.pkt->head, pkt_buffer_len(a->egress.pkt));
+		dump_buffer("recv ", (char *) src->pkt->head, pkt_buffer_len(src->pkt));
 #endif
+		__set_bit(SCTP_FL_COMPLETE, &src->flags);
+		thread_del_read(src->r_thread);
+		src->r_thread = NULL;
+		pkt_buffer_reset_data(src->pkt);
 
-		if (thread->u.f.flags == SCTP_FL_INGRESS) {
-			__set_bit(SCTP_FL_COMPLETE, &a->ingress.flags);
-			thread_del_read(a->ingress.r_thread);
-			a->ingress.r_thread = NULL;
-			pkt_buffer_reset_data(a->ingress.pkt);
-
-			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->ingress.flags)) {
-				pkt_buffer_reset(a->ingress.pkt);
-				goto next_read;
-			}
-
-			action = dra_sctp_plugin_run(DRA_PLUGIN_INGRESS_READ_HOOK, a->ingress.pkt, w);
-			if (action == DRA_PLUGIN_ACT_DROP) {
-				pkt_buffer_reset(a->ingress.pkt);
-				goto next_read;
-			}
-
-			/* Built-in feature */
-			dra_route_optimization(a->ingress.pkt, w, NULL);
-
-			a->egress.w_thread = thread_add_write(thread->master, dra_sctp_write, a,
-							      a->egress.fd, DRA_SCTP_TIMEOUT,
-							      SCTP_FL_INGRESS);
-		} else {
-			__set_bit(SCTP_FL_COMPLETE, &a->egress.flags);
-			thread_del_read(a->egress.r_thread);
-			a->egress.r_thread = NULL;
-			pkt_buffer_reset_data(a->egress.pkt);
-
-			if (__test_and_clear_bit(SCTP_FL_DISCARD, &a->egress.flags)) {
-				pkt_buffer_reset(a->egress.pkt);
-				goto next_read;
-			}
-
-			action = dra_sctp_plugin_run(DRA_PLUGIN_EGRESS_READ_HOOK, a->egress.pkt, w);
-			if (action == DRA_PLUGIN_ACT_DROP) {
-				pkt_buffer_reset(a->egress.pkt);
-				goto next_read;
-			}
-
-			/* Built-in feature */
-			dra_route_optimization(a->egress.pkt, w, NULL);
-
-			a->ingress.w_thread = thread_add_write(thread->master, dra_sctp_write, a,
-							       a->ingress.fd , DRA_SCTP_TIMEOUT,
-							       SCTP_FL_EGRESS);
+		if (__test_and_clear_bit(SCTP_FL_DISCARD, &src->flags)) {
+			pkt_buffer_reset(src->pkt);
+			goto next_read;
 		}
 
+		action = dra_sctp_plugin_run(ingress ? DRA_PLUGIN_INGRESS_READ_HOOK :
+						       DRA_PLUGIN_EGRESS_READ_HOOK, src->pkt, w);
+		if (action == DRA_PLUGIN_ACT_DROP) {
+			pkt_buffer_reset(src->pkt);
+			goto next_read;
+		}
+
+		/* Built-in feature */
+		dra_route_optimization(src->pkt, w, NULL);
+
+		dst->w_thread = thread_add_write(thread->master, dra_sctp_write, a,
+						 dst->fd, DRA_SCTP_TIMEOUT,
+						 thread->u.f.flags);
 		return;
 	}
 
-	if (pkt_full) {
-		/* pkt full and no MSG_EOR means need more room ! discard pkt too big... */
-		if (thread->u.f.flags == SCTP_FL_INGRESS) {
-			__set_bit(SCTP_FL_DISCARD, &a->ingress.flags);
-			pkt_buffer_reset(a->ingress.pkt);
-		} else {
-			__set_bit(SCTP_FL_DISCARD, &a->egress.flags);
-			pkt_buffer_reset(a->egress.pkt);
-		}
+	/* A full buffer without MSG_EOR means the message needs more room than
+	 * we have, so drop it until its end arrives */
+	if (pkt_buffer_tailroom(src->pkt) <= 0) {
+		__set_bit(SCTP_FL_DISCARD, &src->flags);
+		pkt_buffer_reset(src->pkt);
 
 		log_message(LOG_INFO, "%s(): #%d %s pkt need more room for remote peer [%s] discarding..."
 					, __FUNCTION__
 					, w->id
-					, (thread->u.f.flags == SCTP_FL_INGRESS) ? "ingress" : "egress"
+					, ingress ? "ingress" : "egress"
 					, a->addrs_str);
 	}
 
   next_read:
-	if (thread->u.f.flags == SCTP_FL_INGRESS)
-		a->ingress.r_thread = thread_add_read(thread->master, dra_sctp_read, a, fd,
-						      DRA_SCTP_TIMEOUT, SCTP_FL_INGRESS);
-	else
-		a->egress.r_thread = thread_add_read(thread->master, dra_sctp_read, a, fd,
-						     DRA_SCTP_TIMEOUT, SCTP_FL_EGRESS);
+	src->r_thread = thread_add_read(thread->master, dra_sctp_read, a, fd,
+					DRA_SCTP_TIMEOUT, thread->u.f.flags);
 }
 
 static void
