@@ -50,24 +50,30 @@ extern data_t *daemon_data;
 int
 sctp_assoc_str(struct sockaddr *addrs, int cnt, char *dst, size_t dsize)
 {
+	char ip[INET_ADDRSTRLEN];
 	struct sockaddr_in *addr;
-	char *cp = dst;
-	int i;
+	size_t len = 0;
+	int i, n;
 
-	if (!addrs)
+	if (!addrs || !dsize)
 		return -1;
 
-	for (i = 0; i < cnt && cp-dst < dsize; i++) {
+	/* A peer advertises its own address count, so never let the
+	 * accumulated string decide how much room is left */
+	*dst = '\0';
+	for (i = 0; i < cnt; i++) {
 		if (addrs[i].sa_family != AF_INET)
 			continue;
-		if (i)
-			*cp++ = ',';
+
 		addr = (struct sockaddr_in *) &addrs[i];
-		inet_ntoa2(addr->sin_addr.s_addr, cp);
-		cp += strlen(cp);
+		inet_ntoa2(addr->sin_addr.s_addr, ip);
+		n = snprintf(dst + len, dsize - len, "%s%s", len ? "," : "", ip);
+		if (n < 0 || (size_t) n >= dsize - len)
+			break;
+
+		len += n;
 	}
 
-	*cp = '\0';
 	return 0;
 }
 
