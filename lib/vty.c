@@ -262,11 +262,25 @@ vty_new(void)
 	return new;
 }
 
+/* Compare without early exit so timing does not leak the matching prefix */
+static int
+passwd_cmp(const char *a, const char *b)
+{
+	size_t la = strlen(a), lb = strlen(b);
+	unsigned char diff = (la != lb);
+	size_t i;
+
+	for (i = 0; i < la; i++)
+		diff |= (unsigned char) a[i] ^ (unsigned char) (i < lb ? b[i] : 0);
+
+	return diff;
+}
+
 /* Authentication of vty */
 static void
 vty_auth(vty_t *vty, char *buf)
 {
-	char *passwd = NULL;
+	char *passwd = NULL, *hash;
 	node_type_t next_node = 0;
 	int fail;
 	char *crypt(const char *, const char *);
@@ -291,13 +305,14 @@ vty_auth(vty_t *vty, char *buf)
 		break;
 	}
 
-	if (passwd) {
-		if (host.encrypt)
-			fail = strcmp(crypt(buf, passwd), passwd);
-		else
-			fail = strcmp(buf, passwd);
-	} else {
+	if (!passwd) {
 		fail = 1;
+	} else if (host.encrypt) {
+		/* crypt() returns NULL on a malformed salt */
+		hash = crypt(buf, passwd);
+		fail = hash ? passwd_cmp(hash, passwd) : 1;
+	} else {
+		fail = passwd_cmp(buf, passwd);
 	}
 
 	if (!fail) {
