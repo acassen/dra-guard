@@ -25,6 +25,7 @@
 /* Default values */
 #define DRA_JSON_THREAD_CNT_DEFAULT	5
 #define DRA_JSON_BUFFER_SIZE		4096
+#define DRA_JSON_SESSION_MAX		64
 
 /* Channel definition */
 #define DRA_JSON_TCP_TIMEOUT        (1 * TIMER_HZ)
@@ -58,6 +59,7 @@ typedef struct _dra_json_worker {
 typedef struct _dra_json_channel {
 	struct sockaddr_storage	addr;
 	int			thread_cnt;
+	int			session_cnt;
 
 	pthread_mutex_t		workers_mutex;
 	list_head_t		workers;

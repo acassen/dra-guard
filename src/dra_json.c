@@ -171,7 +171,14 @@ static int
 dra_json_session_close(dra_json_session_t *s)
 {
 	jsonw_destroy(&s->jwriter);
-	fclose(s->fp);	/* Also close s->fd */
+
+	/* fp owns the fd, but only once fdopen succeeded */
+	if (s->fp)
+		fclose(s->fp);
+	else
+		close(s->fd);
+
+	__sync_sub_and_fetch(&s->worker->channel->session_cnt, 1);
 	FREE(s);
 	return 0;
 }
@@ -191,13 +198,10 @@ next_rcv:
 
 	nbytes = read(sd, data + offset, size - offset);
 
-	/* data are ready ? */
-	if (nbytes == -1 || nbytes == 0) {
-		if (nbytes == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-			goto next_rcv;
-
+	/* SO_RCVTIMEO expired means an idle peer. Retrying here pinned the
+	 * session thread for the lifetime of the daemon */
+	if (nbytes <= 0)
 		return -1;
-	}
 
 	/* Everything but the girl ! */
 	offset += nbytes;
@@ -300,6 +304,20 @@ dra_json_tcp_accept(thread_ref_t thread)
                                     , ntohs(inet_sockaddrport(&addr)));
                 goto next_accept;
         }
+
+	/* Each session runs its own detached pthread, so cap the fan out.
+	 * Auth and rate limiting belong to the reverse proxy in front */
+	if (__sync_add_and_fetch(&w->channel->session_cnt, 1) > DRA_JSON_SESSION_MAX) {
+		__sync_sub_and_fetch(&w->channel->session_cnt, 1);
+		close(accept_fd);
+		log_message(LOG_INFO, "%s(): #%d session limit %d reached, refusing peer [%s]:%d"
+				    , __FUNCTION__
+				    , w->id
+				    , DRA_JSON_SESSION_MAX
+				    , inet_sockaddrtos(&addr)
+				    , ntohs(inet_sockaddrport(&addr)));
+		goto next_accept;
+	}
 
         /* remote client session allocation */
 	PMALLOC(s);
