@@ -33,21 +33,28 @@ enable_console_log(void)
 	log_console = true;
 }
 
-void
-log_message(const int facility, const char *format, ...)
+static void
+log_vmessage(int facility, const char *format, va_list args)
 {
-	va_list args;
 	char buf[256];
 
-	va_start(args, format);
 	vsnprintf(buf, sizeof(buf), format, args);
-	va_end(args);
 
 	if (log_console) {
 		fprintf(stderr, "%s\n", buf);
 	}
 
 	syslog(facility, "%s", buf);
+}
+
+void
+log_message(const int facility, const char *format, ...)
+{
+	va_list args;
+
+	va_start(args, format);
+	log_vmessage(facility, format, args);
+	va_end(args);
 }
 
 void
@@ -60,7 +67,7 @@ conf_write(FILE *fp, const char *format, ...)
                 vfprintf(fp, format, args);
                 fprintf(fp, "\n");
         } else
-                log_message(LOG_INFO, format, args);
+                log_vmessage(LOG_INFO, format, args);
 
         va_end(args);
 }

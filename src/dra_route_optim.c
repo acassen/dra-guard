@@ -172,7 +172,8 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	    __test_bit(MIP_FL_STATIC_HOST_BIT, &mip->flags)) {
 		err = avp_build_mip6_agent_info_dynamic(ctx, mip, pkt);
 		if (err) {
-			log_message(LOG_INFO, "%s(): unable to build MIP6-Agent-Info...");
+			log_message(LOG_INFO, "%s(): unable to build MIP6-Agent-Info..."
+					    , __FUNCTION__);
 			return -1;
 		}
 

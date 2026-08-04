@@ -185,8 +185,8 @@ dra_arp_worker_task(void *arg)
 
 		log_message(LOG_INFO, "%s(): Error recv arp on interface %s for %u.%u.%u.%u(%m)"
 				    , __FUNCTION__
-				    , NIPQUAD(arp->ip_address)
-				    , arp->ifname);
+				    , arp->ifname
+				    , NIPQUAD(arp->ip_address));
 		goto end;
 	}
 

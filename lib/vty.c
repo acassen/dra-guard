@@ -1524,7 +1524,7 @@ vty_listen(thread_master_t *m, struct sockaddr_storage *addr)
 	/* Socket tweaking */
 	ret = setsockopt(accept_sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 	if (ret < 0) {
-		log_message(LOG_INFO, "Vty error cant do SO_REUSEADDR errno=%d (%ù)"
+		log_message(LOG_INFO, "Vty error cant do SO_REUSEADDR errno=%d (%m)"
 				    , errno);
 		close(accept_sock);
 		return -1;

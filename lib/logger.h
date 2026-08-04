@@ -25,8 +25,10 @@
 #include <syslog.h>
 
 void enable_console_log(void);
-void log_message(int, const char * , ...);
-void conf_write(FILE *, const char *, ...);
+void log_message(int, const char * , ...)
+	__attribute__ ((format (printf, 2, 3)));
+void conf_write(FILE *, const char *, ...)
+	__attribute__ ((format (printf, 2, 3)));
 
 
 #endif
