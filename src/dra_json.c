@@ -222,8 +222,10 @@ dra_json_rcv(dra_json_session_t *s)
 	char *buffer = s->buffer_in;
 	int ret;
 
+	/* json_decode() walks the buffer with str functions, so keep the last
+	 * byte as the terminator a full read would otherwise consume */
 	memset(buffer, 0, DRA_JSON_BUFFER_SIZE);
-	ret = dra_json_http_read(s->fd, buffer, DRA_JSON_BUFFER_SIZE);
+	ret = dra_json_http_read(s->fd, buffer, DRA_JSON_BUFFER_SIZE - 1);
 	if (ret < 0)
 		return -1;
 
