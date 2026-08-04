@@ -99,7 +99,11 @@ DEFUN(destination_host,
 	}
 
 	strlcpy(mip->destination_host, argv[0], MIP_DST_BUFSIZE);
-	avp_build_mip6_agent_info(mip);
+	if (avp_build_mip6_agent_info(mip) < 0) {
+		vty_out(vty, "%% destination-host too long%s", VTY_NEWLINE);
+		return CMD_WARNING;
+	}
+
 	__set_bit(MIP_FL_STATIC_HOST_BIT, &mip->flags);
 	return CMD_SUCCESS;
 }
@@ -118,7 +122,11 @@ DEFUN(destination_realm,
 	}
 
 	strlcpy(mip->destination_realm, argv[0], MIP_DST_BUFSIZE);
-	avp_build_mip6_agent_info(mip);
+	if (avp_build_mip6_agent_info(mip) < 0) {
+		vty_out(vty, "%% destination-realm too long%s", VTY_NEWLINE);
+		return CMD_WARNING;
+	}
+
 	__set_bit(MIP_FL_STATIC_REALM_BIT, &mip->flags);
 	return CMD_SUCCESS;
 }

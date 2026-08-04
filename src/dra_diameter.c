@@ -125,6 +125,11 @@ avp_delete(uint8_t *data, pkt_buffer_t *pkt)
 	int len = pkt_buffer_len(pkt) - delta;
 	int tail_len = pkt->end - (data + delta);
 
+	/* Earlier rewrites move the buffer under us, so the AVP validated at
+	 * parse time may no longer sit inside it */
+	if (tail_len < 0)
+		return 0;
+
 	memmove(data, data + delta, tail_len);
 	pkt_buffer_set_end_pointer(pkt, len);
 
@@ -302,6 +307,8 @@ avp_mip6_agent_info_replace(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buff
 
 	delta = DIAMETER_GET_ULONG(avp->avph->avp_len) - mip_len;
 	tail_len = pkt->end - (cp + DIAMETER_GET_ULONG(avp->avph->avp_len));
+	if (tail_len < 0)
+		return 0;
 
 	if (delta < 0) {
 		/* Bounds checking */
@@ -330,7 +337,15 @@ avp_mip6_agent_info_replace(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buff
 static int
 avp_pdn_gw_alloc_type_set(uint8_t *data, uint32_t value)
 {
-	uint32_t *alloc_type = (uint32_t *) (data + sizeof(avp_hdr_t) + sizeof(avp_vendor_t));
+	avp_hdr_t *avph = (avp_hdr_t *) data;
+	uint32_t *alloc_type;
+
+	/* Peer supplied AVPs reach this, refuse one too short to hold a value */
+	if (DIAMETER_GET_ULONG(avph->avp_len) <
+	    sizeof(avp_hdr_t) + sizeof(avp_vendor_t) + sizeof(uint32_t))
+		return -1;
+
+	alloc_type = (uint32_t *) (data + sizeof(avp_hdr_t) + sizeof(avp_vendor_t));
 	*alloc_type = htonl(value);
 	return 0;
 }
@@ -346,6 +361,9 @@ avp_mip6_agent_info_insert(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buffe
 
 	avp_end = cp + DIAMETER_GET_ULONG(avp->avph->avp_len);
 	tail_len = pkt->end - avp_end;
+	if (tail_len < 0)
+		return 0;
+
 	pdn_gw_alloc_type_len = sizeof(avp_hdr_t) + sizeof(avp_vendor_t) + sizeof(uint32_t);
 
 	/* Bounds checking */
@@ -412,7 +430,7 @@ avp_service_selection_cmp(uint8_t *a, uint8_t *b)
 	if (len_a != len_b)
 		return -1;
 
-	return memcmp(a + offset, b + offset, len_a);
+	return memcmp(a + offset, b + offset, len_a - offset);
 }
 
 static bool
@@ -488,7 +506,7 @@ avp_context_id_update(uint8_t *buffer, int id, uint8_t *end)
 	avp_hdr_t *avph;
 	uint8_t *cp;
 	uint32_t *context_id;
-	int offset = sizeof(avp_hdr_t);
+	uint32_t offset;
 
 	if (!buffer)
 		return;
@@ -498,7 +516,10 @@ avp_context_id_update(uint8_t *buffer, int id, uint8_t *end)
 		return;
 
 	avph = (avp_hdr_t *) cp;
-	offset += (avph->avp_len & AVP_FL_VENDOR) ? sizeof(avp_vendor_t) : 0;
+	offset = avp_hdr_len(avph);
+	if (DIAMETER_GET_ULONG(avph->avp_len) < offset + sizeof(uint32_t))
+		return;
+
 	context_id = (uint32_t *) (cp + offset);
 	*context_id = htonl(id);
 }
@@ -762,6 +783,14 @@ avp_build_mip_home_agent_host(const char *dst_host, size_t hsize, const char *ds
 	int offset = 0;
 	size_t len;
 
+	/* The realm comes from the peer Origin-Realm, so size the whole
+	 * build before writing anything */
+	len = sizeof(*avph) + PAD4(sizeof(*avph) + hsize);
+	if (rsize)
+		len += PAD4(sizeof(*avph) + rsize);
+	if (len > buffer_size)
+		return -1;
+
 	memset(buffer, 0, buffer_size);
 	avph = (avp_hdr_t *) cp;
 	avph->avp_code = htonl(AC_3GPP_MIP_HOME_AGENT_HOST);
@@ -786,8 +815,7 @@ avp_build_mip6_agent_info(dra_mip6_agent_info_t *mip)
 {
 	uint8_t *cp = mip->agent;
 	avp_hdr_t *avph;
-	int offset = 0;
-	size_t len;
+	int offset = 0, len;
 
 	avph = (avp_hdr_t *) cp;
 	avph->avp_code = htonl(AC_3GPP_MIP6_AGENT_INFO);
@@ -797,8 +825,10 @@ avp_build_mip6_agent_info(dra_mip6_agent_info_t *mip)
 	len = avp_build_mip_home_agent_host(mip->destination_host, strlen(mip->destination_host),
 					    mip->destination_realm, strlen(mip->destination_realm),
 					    cp + offset, MIP_AVP_BUFSIZE - offset);
-	offset += len;
+	if (len < 0)
+		return -1;
 
+	offset += len;
 	avph->avp_len = htonl(offset) | AVP_FL_MANDATORY;
 
 	mip->agent_len = offset;
@@ -812,8 +842,8 @@ avp_build_mip6_agent_info_dynamic(avp_ctx_t *ctx, dra_mip6_agent_info_t *mip, pk
 	uint8_t *avp_origin_realm = NULL;
 	char *avp_origin_realm_data = NULL;
 	avp_hdr_t *avph;
-	int offset = 0, avp_origin_realm_len = 0;
-	size_t len;
+	int offset = 0, avp_origin_realm_len = 0, len;
+	uint32_t hdr_len;
 
 	if (!__test_bit(MIP_FL_STATIC_HOST_BIT, &mip->flags))
 		return -1;
@@ -824,8 +854,9 @@ avp_build_mip6_agent_info_dynamic(avp_ctx_t *ctx, dra_mip6_agent_info_t *mip, pk
 			return -1;
 
 		avph = (avp_hdr_t *) avp_origin_realm;
-		avp_origin_realm_data = (char *)avp_origin_realm + sizeof(avp_hdr_t);
-		avp_origin_realm_len = DIAMETER_GET_ULONG(avph->avp_len) - sizeof(avp_hdr_t);
+		hdr_len = avp_hdr_len(avph);
+		avp_origin_realm_data = (char *)avp_origin_realm + hdr_len;
+		avp_origin_realm_len = DIAMETER_GET_ULONG(avph->avp_len) - hdr_len;
 	}
 
 	avph = (avp_hdr_t *) cp;
@@ -834,10 +865,12 @@ avp_build_mip6_agent_info_dynamic(avp_ctx_t *ctx, dra_mip6_agent_info_t *mip, pk
 	offset += sizeof(*avph);
 
 	len = avp_build_mip_home_agent_host(mip->destination_host, strlen(mip->destination_host),
-					    avp_origin_realm_data, avp_origin_realm_len,
-					    cp + offset, MIP_AVP_BUFSIZE - offset);
-	offset += len;
+					   avp_origin_realm_data, avp_origin_realm_len,
+					   cp + offset, MIP_AVP_BUFSIZE - offset);
+	if (len < 0)
+		return -1;
 
+	offset += len;
 	avph->avp_len = htonl(offset) | AVP_FL_MANDATORY;
 
 	ctx->avp_mai_len = offset;
