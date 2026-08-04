@@ -141,6 +141,7 @@ extern int sctp_assoc_str(struct sockaddr *, int, char *, size_t);
 extern int dra_sctp_parse_addrs_list_port(char *, struct sockaddr **);
 extern dra_sctp_proxy_t *dra_sctp_proxy_get(const char *);
 extern dra_sctp_proxy_t *dra_sctp_proxy_alloc(const char *name);
+extern int dra_sctp_proxys_start(void);
 extern int dra_sctp_listener_destroy(dra_sctp_proxy_t *);
 extern int dra_sctp_destroy(void);
 

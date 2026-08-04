@@ -269,8 +269,6 @@ DEFUN(sctp_proxy_ingress_assoc_local_nat,
 	}
 
 	__set_bit(SCTP_FL_LOCAL_NAT, &p->flags);
-	dra_sctp_proto_init(p);
-	dra_sctp_worker_start(p);
 	return CMD_SUCCESS;
 }
 

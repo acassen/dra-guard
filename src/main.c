@@ -85,6 +85,8 @@ start_dra(void)
 	if (ret < 0) {
 		stop_dra();
 	}
+
+	dra_sctp_proxys_start();
 }
 
 /* Terminate handler */

@@ -195,6 +195,33 @@ dra_sctp_proxy_init(dra_sctp_proxy_t *l)
 	return 0;
 }
 
+/*
+ * Start once the whole configuration is known, so directive order does not
+ * decide whether a proxy runs or with how many workers.
+ */
+int
+dra_sctp_proxys_start(void)
+{
+	dra_sctp_proxy_t *p;
+
+	list_for_each_entry(p, &daemon_data->sctp_proxys, next) {
+		if (__test_bit(SCTP_FL_RUNNING, &p->flags))
+			continue;
+
+		if (!p->addrs_cnt || !p->connect_addrs_cnt) {
+			log_message(LOG_INFO, "%s(): sctp-proxy '%s' needs both 'listen' and"
+					      " 'connect', not starting it"
+					    , __FUNCTION__, p->name);
+			continue;
+		}
+
+		dra_sctp_proto_init(p);
+		dra_sctp_worker_start(p);
+	}
+
+	return 0;
+}
+
 int
 dra_sctp_proxy_destroy(dra_sctp_proxy_t *l)
 {
