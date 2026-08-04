@@ -575,16 +575,10 @@ apn_configuration_build(int id, avp_node_t *avp
 	for (cp = avp_apn_wildcard->data; cp < apn_wildcard_end; cp += PAD4(DIAMETER_GET_ULONG(avph->avp_len))) {
 		avph = (avp_hdr_t *) cp;
 
-		/* Bound check */
-		if (cp + sizeof(avp_hdr_t) > apn_wildcard_end) {
+		/* avp_copy() bounds its write but reads the declared length
+		 * from the source, so the source has to be inside the parent */
+		if (!avp_is_valid(cp, apn_wildcard_end)) {
 			log_message(LOG_INFO, "%s(): bound-checking failed !!! (ignoring)..."
-					    , __FUNCTION__);
-			return 0;
-		}
-
-		/* Prevent infinite loop from bogus zeroed avp->len */
-		if (!DIAMETER_GET_ULONG(avph->avp_len)) {
-			log_message(LOG_INFO, "%s(): null AVP len detected !!! (ignoring)..."
 					    , __FUNCTION__);
 			return 0;
 		}
@@ -676,7 +670,9 @@ avp_specific_apn_info_delete(avp_node_t *avp, pkt_buffer_t *pkt)
 
 	for (cp = avp->data; cp < data_end; cp += next) {
 		avph = (avp_hdr_t *) cp;
-		if (cp + sizeof(avp_hdr_t) > data_end)
+
+		/* avp_delete() moves a tail sized from this length */
+		if (!avp_is_valid(cp, data_end))
 			goto end;
 
 		next = PAD4(DIAMETER_GET_ULONG(avph->avp_len));
