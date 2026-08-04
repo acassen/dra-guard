@@ -126,6 +126,10 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	msg_root_t *msg_root;
 	uint8_t *avp_data;
 	int delta, err;
+	uint32_t len;
+
+	if (pkt_buffer_len(pkt) < sizeof(msg_hdr_t))
+		return -1;
 
 	if (DIAMETER_GET_ULONG(msgh->msg_code) != CC_3GPP_CMD_UL)
 		return -1;
@@ -187,8 +191,11 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	avp_len_update_delta(msg_root->avp[1].avph, delta, AVP_FL_MANDATORY|AVP_FL_VENDOR);
 	msg_len_update_delta(msg_root->msgh, delta, DIAMETER_PROTO_VERSION);
 
-	/* Update Pkt */
-	pkt_buffer_set_end_pointer(pkt, DIAMETER_GET_ULONG(((msg_hdr_t *) pkt->head)->msg_length));
+	/* Update Pkt. msg_length is peer supplied, so it may only trim what
+	 * the buffer already holds, never push end past it */
+	len = DIAMETER_GET_ULONG(((msg_hdr_t *) pkt->head)->msg_length);
+	if (len >= sizeof(msg_hdr_t) && len <= pkt_buffer_len(pkt))
+		pkt_buffer_set_end_pointer(pkt, len);
 	pkt_buffer_reset_data(pkt);
 
 	/* Save modified pkt */
