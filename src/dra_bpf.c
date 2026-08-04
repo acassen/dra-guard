@@ -445,9 +445,15 @@ static int
 dra_qdisc_clsact_add(struct bpf_tc_hook *q_hook)
 {
 	char errmsg[DRA_XDP_STRERR_BUFSIZE];
+	libbpf_print_fn_t print_fn;
 	int err;
 
+	/* An interface with no clsact qdisc yet has nothing to release, so the
+	 * kernel error this raises is expected and only reads like a failure */
+	print_fn = libbpf_set_print(NULL);
 	bpf_tc_hook_destroy(q_hook);	/* Release previously stalled entry */
+	libbpf_set_print(print_fn);
+
 	err = bpf_tc_hook_create(q_hook);
 	if (err) {
 		libbpf_strerror(err, errmsg, DRA_XDP_STRERR_BUFSIZE);
