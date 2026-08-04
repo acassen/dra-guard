@@ -139,6 +139,8 @@ parse_cmdline(int argc, char **argv)
 {
 	int c, longindex, curind;
 	bool bad_option = false;
+	long facility;
+	char *endptr;
 
 	struct option long_options[] = {
 		{"log-console",		no_argument,		NULL, 'l'},
@@ -190,7 +192,15 @@ parse_cmdline(int argc, char **argv)
 			debug |= 16;
 			break;
 		case 'S':
-			log_facility = LOG_FACILITY[atoi(optarg)].facility;
+			facility = strtol(optarg, &endptr, 10);
+			if (endptr == optarg || *endptr ||
+			    facility < 0 || facility > LOG_FACILITY_MAX) {
+				fprintf(stderr, "Invalid log facility %s\n", optarg);
+				bad_option = true;
+				break;
+			}
+
+			log_facility = LOG_FACILITY[facility].facility;
 			break;
 		case 'f':
 			conf_file = optarg;
