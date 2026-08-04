@@ -131,6 +131,36 @@ avp_delete(uint8_t *data, pkt_buffer_t *pkt)
 	return -delta;
 }
 
+/* Header size, the vendor id is only present when the V bit is set */
+static uint32_t
+avp_hdr_len(avp_hdr_t *avph)
+{
+	return sizeof(avp_hdr_t) +
+	       ((avph->avp_len & AVP_FL_VENDOR) ? sizeof(avp_vendor_t) : 0);
+}
+
+/*
+ * Wire length is 24bit so an AVP can claim far more than the packet holds.
+ * Require the header to fit, the declared length to cover that header and
+ * the padded AVP to stay inside the buffer. This also rejects the zeroed
+ * length that used to spin the walkers.
+ */
+static bool
+avp_is_valid(uint8_t *cp, uint8_t *data_end)
+{
+	avp_hdr_t *avph = (avp_hdr_t *) cp;
+	uint32_t len;
+
+	if (!cp || cp + sizeof(avp_hdr_t) > data_end)
+		return false;
+
+	len = DIAMETER_GET_ULONG(avph->avp_len);
+	if (len < avp_hdr_len(avph))
+		return false;
+
+	return cp + PAD4(len) <= data_end;
+}
+
 uint8_t *
 avp_get(uint32_t code, uint8_t *data, uint8_t *data_end)
 {
@@ -139,11 +169,7 @@ avp_get(uint32_t code, uint8_t *data, uint8_t *data_end)
 
 	for (cp = data; cp < data_end; cp += PAD4(DIAMETER_GET_ULONG(avph->avp_len))) {
 		avph = (avp_hdr_t *) cp;
-		if (cp + sizeof(avp_hdr_t) > data_end)
-			return NULL;
-
-		/* Prevent infinite loop from bogus zeroed avp->len */
-		if (!DIAMETER_GET_ULONG(avph->avp_len))
+		if (!avp_is_valid(cp, data_end))
 			return NULL;
 
 		if (ntohl(avph->avp_code) == code)
@@ -157,7 +183,7 @@ avp_node_t *
 avp_parse(avp_node_t *node, uint32_t code, uint8_t *data, uint8_t *data_end)
 {
 	avp_hdr_t *avph;
-	int i = 0, offset;
+	int i = 0;
 	uint8_t *cp;
 
 	memset(node, 0, sizeof(avp_node_t) * DIAMETER_MAX_APN_PARSED);
@@ -165,20 +191,14 @@ avp_parse(avp_node_t *node, uint32_t code, uint8_t *data, uint8_t *data_end)
 	for (cp = data; i < DIAMETER_MAX_APN_PARSED && cp < data_end;
 	     cp += PAD4(DIAMETER_GET_ULONG(avph->avp_len))) {
 		avph = (avp_hdr_t *) cp;
-		if (cp + sizeof(avp_hdr_t) > data_end)
-			return NULL;
-
-		/* Prevent infinite loop from bogus zeroed avp->len */
-		if (!DIAMETER_GET_ULONG(avph->avp_len))
+		if (!avp_is_valid(cp, data_end))
 			return NULL;
 
 		if (ntohl(avph->avp_code) != code)
 			continue;
 
-		offset = sizeof(avp_hdr_t);
-		offset += (avph->avp_len & AVP_FL_VENDOR) ? sizeof(avp_vendor_t) : 0;
 		node[i].avph = avph;
-		node[i++].data = cp + offset;
+		node[i++].data = cp + avp_hdr_len(avph);
 	}
 
 	return (i) ? node : NULL;
@@ -193,21 +213,18 @@ avp_parse_path(avp_node_t *node, uint32_t *avp_path, uint8_t *data, uint8_t *dat
 
 	memset(node, 0, sizeof(avp_node_t) * DIAMETER_MAX_APN_PARSED);
 
-	for (i = 0, cp = data; avp_path[i] && cp < data_end; i++, cp += offset) {
+	/* A partially resolved path leaves NULL nodes behind, and every
+	 * caller dereferences node[0] straight away */
+	for (i = 0, cp = data; avp_path[i]; i++, cp += offset) {
+		if (cp >= data_end)
+			return NULL;
+
 		cp = avp_get(avp_path[i], cp, data_end);
 		if (!cp)
 			return NULL;
 
 		avph = (avp_hdr_t *) cp;
-		if (cp + sizeof(avp_hdr_t) > data_end)
-			return NULL;
-
-		/* Prevent infinite loop from bogus zeroed avp->len */
-		if (!DIAMETER_GET_ULONG(avph->avp_len))
-			return NULL;
-
-		offset = sizeof(avp_hdr_t);
-		offset += (avph->avp_len & AVP_FL_VENDOR) ? sizeof(avp_vendor_t) : 0;
+		offset = avp_hdr_len(avph);
 		node[i].avph = avph;
 		node[i].data = cp + offset;
 	}
@@ -246,20 +263,24 @@ msg_parse_path(avp_ctx_t *ctx, uint32_t *avp_path, uint8_t *data, uint8_t *data_
 	avp_hdr_t *avph;
 	int i=0, offset=0;
 
+	/* Too short to carry a message header, no AVP can follow */
+	if (data + sizeof(msg_hdr_t) > data_end)
+		return NULL;
+
 	root->msgh = (msg_hdr_t *) data;
 	memset(root->avp, 0, sizeof(avp_node_t) * DIAMETER_MAX_AVP_PARSED);
 
-	for (i = 0; avp_path[i] && cp < data_end; i++, cp += offset) {
+	/* Same as avp_parse_path(), an incomplete path must not reach callers */
+	for (i = 0; avp_path[i]; i++, cp += offset) {
+		if (cp >= data_end)
+			return NULL;
+
 		cp = avp_get(avp_path[i], cp, data_end);
 		if (!cp)
 			return NULL;
 
 		avph = (avp_hdr_t *) cp;
-		if (cp + sizeof(avp_hdr_t) > data_end)
-			return NULL;
-
-		offset = sizeof(avp_hdr_t);
-		offset += (avph->avp_len & AVP_FL_VENDOR) ? sizeof(avp_vendor_t) : 0;
+		offset = avp_hdr_len(avph);
 		root->avp[i].avph = avph;
 		root->avp[i].data = cp + offset;
 	}
