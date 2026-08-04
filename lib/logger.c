@@ -37,8 +37,16 @@ void
 log_message_va(int facility, const char *format, va_list args)
 {
 	char buf[256];
+	int len;
 
-	vsnprintf(buf, sizeof(buf), format, args);
+	len = vsnprintf(buf, sizeof(buf), format, args);
+	if (len >= (int) sizeof(buf))
+		len = sizeof(buf) - 1;
+
+	/* Callers passing a preformatted line, libbpf for one, terminate it
+	 * themselves and we add our own */
+	if (len > 0 && buf[len - 1] == '\n')
+		buf[len - 1] = '\0';
 
 	if (log_console) {
 		fprintf(stderr, "%s\n", buf);
