@@ -124,7 +124,7 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	dra_mip6_agent_info_t *mip = static_mip;
 	dra_debug_entry_t *e;
 	msg_root_t *msg_root;
-	uint8_t *avp_data;
+	uint8_t *avp_data, *avp_end;
 	int delta, err;
 	uint32_t len;
 
@@ -152,10 +152,12 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 		return -1;
 
 	if (__test_bit(SCTP_FL_MATCH_TARGET_REWRITE_ULA, &p->flags)) {
-		/* MSISDN Match */
+		/* MSISDN Match. The AVP ends at its own header plus its length,
+		 * measuring from the payload runs a header past it */
 		avp_subsd = &msg_root->avp[0];
-		e = avp_msisdn_match(avp_subsd->data, avp_subsd->data + DIAMETER_GET_ULONG(avp_subsd->avph->avp_len)
-						    , p->flags);
+		avp_end = (uint8_t *) avp_subsd->avph +
+			  DIAMETER_GET_ULONG(avp_subsd->avph->avp_len);
+		e = avp_msisdn_match(avp_subsd->data, avp_end, p->flags);
 		if (!e)
 			return -1;
 
