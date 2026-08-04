@@ -38,13 +38,15 @@
 extern data_t *daemon_data;
 
 
-static int
+/* Encap type, IP and TCP headers prepended to every captured payload */
+#define PCAP_HDR_LEN (sizeof(uint32_t) + sizeof(struct iphdr) + sizeof(struct tcphdr))
+
+static void
 dra_pcap_pkt_prepare(unsigned char *buffer, size_t len, int id)
 {
 	uint32_t *encap_type = (uint32_t *) buffer;
 	struct iphdr *iph = (struct iphdr *) (buffer + sizeof(uint32_t));
 	struct tcphdr *tcph = (struct tcphdr *) (buffer + sizeof(uint32_t) + sizeof(struct iphdr));
-	int offset = sizeof(uint32_t) + sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	/* PCAP encap type*/
 	*encap_type = htonl(AF_INET);
@@ -68,27 +70,30 @@ dra_pcap_pkt_prepare(unsigned char *buffer, size_t len, int id)
 	tcph->dest = htons(DIAMETER_PORT);
 	tcph->doff = 5;
 	tcph->window = htons(1 << 13);
-
-	return offset;
 }
 
 void
 dra_pcap_pkt_write(dra_pcap_t *p, pkt_buffer_t *pkt, int id)
 {
 	struct pcap_pkthdr hdr;
-	int offset;
+	size_t len;
 
 	if (!__test_bit(DRA_PCAP_FL_OPEN_BIT, &p->flags))
 		return;
 
+	/* Payload is peer sized and shares the scratch buffer with the
+	 * synthetic headers, so truncate rather than run off the end */
+	len = pkt_buffer_len(pkt);
+	if (len > DRA_PCAP_BUFSIZE - PCAP_HDR_LEN)
+		len = DRA_PCAP_BUFSIZE - PCAP_HDR_LEN;
+
 	pthread_mutex_lock(&p->mutex);
 
-	offset = dra_pcap_pkt_prepare(p->buffer, pkt_buffer_len(pkt), id);
+	dra_pcap_pkt_prepare(p->buffer, len, id);
+	memcpy(p->buffer + PCAP_HDR_LEN, pkt->head, len);
 
 	gettimeofday(&hdr.ts, NULL);
-	hdr.len = hdr.caplen = pkt_buffer_len(pkt) + offset;
-
-	memcpy(p->buffer + offset, pkt->head, pkt_buffer_len(pkt));
+	hdr.len = hdr.caplen = len + PCAP_HDR_LEN;
 	pcap_dump((u_char *)p->dumper, &hdr, p->buffer);
 	pcap_dump_flush(p->dumper);
 
