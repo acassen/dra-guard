@@ -166,6 +166,15 @@ avp_is_valid(uint8_t *cp, uint8_t *data_end)
 	return cp + PAD4(len) <= data_end;
 }
 
+/* avp_len excludes the trailing padding, so a sibling starts on the next
+ * 4 byte boundary rather than at the end of the value.
+ */
+static uint8_t *
+avp_next(avp_hdr_t *avph)
+{
+	return (uint8_t *) avph + PAD4(DIAMETER_GET_ULONG(avph->avp_len));
+}
+
 uint8_t *
 avp_get(uint32_t code, uint8_t *data, uint8_t *data_end)
 {
@@ -303,10 +312,11 @@ static int
 avp_mip6_agent_info_replace(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buffer_t *pkt)
 {
 	uint8_t *cp = (uint8_t *)avp->avph;
-	int delta = 0, tail_len;
+	uint8_t *next = avp_next(avp->avph);
+	int delta, tail_len;
 
-	delta = DIAMETER_GET_ULONG(avp->avph->avp_len) - mip_len;
-	tail_len = pkt->end - (cp + DIAMETER_GET_ULONG(avp->avph->avp_len));
+	delta = next - cp - mip_len;
+	tail_len = pkt->end - next;
 	if (tail_len < 0)
 		return 0;
 
@@ -319,17 +329,14 @@ avp_mip6_agent_info_replace(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buff
 			return 0;
 		}
 
-		cp += DIAMETER_GET_ULONG(avp->avph->avp_len);
-		memmove(cp - delta, cp, tail_len);
+		memmove(next - delta, next, tail_len);
 	}
 
 	/* cumulative case including delta == 0 */
-	memcpy((uint8_t *)avp->avph, mip, mip_len);
-	
-	if (delta > 0) {
-		cp += mip_len;
-		memmove(cp, cp + delta, tail_len);
-	}
+	memcpy(cp, mip, mip_len);
+
+	if (delta > 0)
+		memmove(cp + mip_len, next, tail_len);
 
 	return -delta;
 }
@@ -353,13 +360,12 @@ avp_pdn_gw_alloc_type_set(uint8_t *data, uint32_t value)
 static int
 avp_mip6_agent_info_insert(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buffer_t *pkt)
 {
-	uint8_t *cp = (uint8_t *)avp->avph;
 	avp_hdr_t *avph;
-	uint8_t *avp_end;
+	uint8_t *cp, *avp_end;
 	avp_vendor_t *vendor;
 	int pdn_gw_alloc_type_len, tail_len;
 
-	avp_end = cp + DIAMETER_GET_ULONG(avp->avph->avp_len);
+	avp_end = avp_next(avp->avph);
 	tail_len = pkt->end - avp_end;
 	if (tail_len < 0)
 		return 0;
@@ -561,7 +567,7 @@ apn_configuration_build(int id, avp_node_t *avp
 
 	/* Append at the end of APN wildcard buffer */
 	apn_wildcard_end = (uint8_t *)avp_apn_wildcard->avph + DIAMETER_GET_ULONG(avp_apn_wildcard->avph->avp_len);
-	append_buffer = apn_wildcard_end + avp_apn_wildcard_offset;
+	append_buffer = avp_next(avp_apn_wildcard->avph) + avp_apn_wildcard_offset;
 
 	/* In order to optimize memory access, we are performing 2 phases. Phase0 will
 	 * compute space room needed, Phase1 will fill buffer accordingly if enough
