@@ -202,7 +202,8 @@ next_rcv:
 	/* Everything but the girl ! */
 	offset += nbytes;
 
-	if (buffer[offset-2] == '\r' && buffer[offset-1] == '\n')
+	/* a request ends with CRLF */
+	if (offset >= 2 && buffer[offset-2] == '\r' && buffer[offset-1] == '\n')
 		return offset;
 
 	if (offset < size)
