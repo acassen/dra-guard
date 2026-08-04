@@ -130,22 +130,20 @@ dra_disk_open_write(char *path)
 int
 dra_disk_write(int fd, char *buffer, int size)
 {
-        int offset = 0, ret = 0;
+        int offset = 0, ret;
 
-        if (!fd)
+        if (fd < 0)
                 return -1;
 
-  retry:
-        ret = write(fd, buffer + offset, size - offset);
-        if (ret < 0) {
-                printf("%s(): error writing to file (%m)", __FUNCTION__);
-                return -1;
+        while (offset < size) {
+                ret = write(fd, buffer + offset, size - offset);
+                if (ret < 0) {
+                        printf("%s(): error writing to file (%m)", __FUNCTION__);
+                        return -1;
+                }
+
+                offset += ret;
         }
-
-        offset += ret;
-
-        if (offset < size)
-                goto retry;
 
         return 0;
 }
@@ -169,23 +167,26 @@ dra_disk_open_read(char *path)
 int
 dra_disk_read(int fd, char *buffer, int size)
 {
-	int offset = 0, ret = 0;
+	int offset = 0, ret;
 
-	if (!fd)
+	if (fd < 0)
 		return -1;
 
-  retry:
-	ret = read(fd, buffer + offset, size - offset);
-	if (ret < 0)
-		return -1;
+	while (offset < size) {
+		ret = read(fd, buffer + offset, size - offset);
+		if (ret < 0)
+			return -1;
 
-	if (ret == 0)
-		return offset;
+		/* short read means a truncated record, never report it as data */
+		if (!ret) {
+			if (!offset)
+				return 0;
+			errno = ENOEXEC;
+			return -1;
+		}
 
-	offset += ret;
+		offset += ret;
+	}
 
-	if (offset < size)
-		goto retry;
-
-	return offset;
+	return size;
 }
