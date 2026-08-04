@@ -703,6 +703,33 @@ thread_event_del(const thread_t *thread_cp, unsigned flag)
 	return 0;
 }
 
+/* Drop epoll interest for the fired direction when the callback did not
+ * re-arm it, otherwise the scheduler keeps waking on a stale event */
+static void
+thread_event_reconcile(thread_master_t *m, thread_t *thread)
+{
+	/* A cancelled event is already freed and cleared current_event */
+	if (!m->current_event)
+		return;
+
+	switch (thread->type) {
+	case THREAD_READY_READ_FD:
+	case THREAD_READ_TIMEOUT:
+	case THREAD_READ_ERROR:
+		if (!thread->event->read)
+			thread_event_del(thread, THREAD_FL_EPOLL_READ_BIT);
+		break;
+	case THREAD_READY_WRITE_FD:
+	case THREAD_WRITE_TIMEOUT:
+	case THREAD_WRITE_ERROR:
+		if (!thread->event->write)
+			thread_event_del(thread, THREAD_FL_EPOLL_WRITE_BIT);
+		break;
+	default:
+		break;
+	}
+}
+
 /* Make thread master. */
 thread_master_t *
 thread_make_master(bool nosignal)
@@ -1772,6 +1799,9 @@ process_threads(thread_master_t *m)
 			/* If m->current_thread has been cleared, the thread
 			 * has been freed. This happens during a reload. */
 			thread = m->current_thread;
+
+			if (thread)
+				thread_event_reconcile(m, thread);
 
 			if (thread_type == THREAD_TERMINATE_START)
 				shutting_down = true;
