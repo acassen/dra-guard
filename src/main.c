@@ -77,6 +77,10 @@ start_dra(void)
 	dra_vty_init();
 	sort_node();
 
+	/* Programs load while the config is read, and daemonizing has already
+	 * sent stderr to /dev/null, so route libbpf through the log first */
+	dra_bpf_init();
+
 	ret = vty_read_config(conf_file, default_conf_file);
 	if (ret < 0) {
 		stop_dra();
