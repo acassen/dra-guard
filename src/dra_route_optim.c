@@ -189,9 +189,9 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	}
 
 	/* Update parents AVPs */
-	avp_len_update_delta(msg_root->avp[0].avph, delta, AVP_FL_MANDATORY|AVP_FL_VENDOR);
-	avp_len_update_delta(msg_root->avp[1].avph, delta, AVP_FL_MANDATORY|AVP_FL_VENDOR);
-	msg_len_update_delta(msg_root->msgh, delta, DIAMETER_PROTO_VERSION);
+	avp_len_update_delta(msg_root->avp[0].avph, delta);
+	avp_len_update_delta(msg_root->avp[1].avph, delta);
+	msg_len_update_delta(msg_root->msgh, delta);
 
 	/* Update Pkt. msg_length is peer supplied, so it may only trim what
 	 * the buffer already holds, never push end past it */

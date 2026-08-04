@@ -32,7 +32,8 @@
 #define DIAMETER_MAX_APN_PARSED	32
 #define PAD4(_x) ((_x) + ( (4 - (_x)) & 3 ))
 #define DIAMETER_VSPEC_GET_FL(X) ((X) | 0xff000000)
-#define DIAMETER_GET_ULONG(X) (ntohl((X)) & 0x00ffffff)
+#define DIAMETER_LEN_MASK	0x00ffffff
+#define DIAMETER_GET_ULONG(X) (ntohl((X)) & DIAMETER_LEN_MASK)
 #define DIAMETER_VSPEC_FL	0xc0000000
 #define VENDOR_3GPP		10415UL
 
@@ -100,8 +101,8 @@ typedef struct _avp_ctx {
 /* Prototypes */
 extern uint8_t *avp_get(uint32_t, uint8_t *, uint8_t *);
 extern avp_node_t *avp_parse(avp_node_t *, uint32_t, uint8_t *, uint8_t *);
-extern void avp_len_update_delta(avp_hdr_t *, int, uint8_t);
-extern void msg_len_update_delta(msg_hdr_t *, int, uint8_t);
+extern void avp_len_update_delta(avp_hdr_t *, int);
+extern void msg_len_update_delta(msg_hdr_t *, int);
 extern msg_root_t *msg_parse_apn_conf_profil_path(avp_ctx_t *, pkt_buffer_t *);
 extern int avp_mip6_agent_info_update(avp_ctx_t *, avp_node_t *, uint8_t *, int, pkt_buffer_t *);
 extern int avp_build_mip6_agent_info(dra_mip6_agent_info_t *);

@@ -246,11 +246,16 @@ avp_parse_path(avp_node_t *node, uint32_t *avp_path, uint8_t *data, uint8_t *dat
 	return node;
 }
 
+/* The flags byte is the AVP's own, only the length moves. Forcing it here
+ * would hand the peer a header whose vendor bit no longer matches the body.
+ */
 void
-avp_len_update_delta(avp_hdr_t *avph, int delta, uint8_t flags)
+avp_len_update_delta(avp_hdr_t *avph, int delta)
 {
-	int len = DIAMETER_GET_ULONG(avph->avp_len) + delta;
-	avph->avp_len = htonl(len) | flags;
+	uint32_t len = DIAMETER_GET_ULONG(avph->avp_len) + delta;
+	uint32_t flags = ntohl(avph->avp_len) & ~DIAMETER_LEN_MASK;
+
+	avph->avp_len = htonl(flags | (len & DIAMETER_LEN_MASK));
 }
 
 #if 0
@@ -262,11 +267,16 @@ msg_dump(msg_root_t *root)
 }
 #endif
 
+/* The version is ours to state, but it belongs in the top byte of the
+ * network order word, not in whichever byte the host maps 0x01 to.
+ */
 void
-msg_len_update_delta(msg_hdr_t *msgh, int delta, uint8_t flags)
+msg_len_update_delta(msg_hdr_t *msgh, int delta)
 {
-	int len = DIAMETER_GET_ULONG(msgh->msg_length) + delta;
-	msgh->msg_length = htonl(len) | flags;
+	uint32_t len = DIAMETER_GET_ULONG(msgh->msg_length) + delta;
+
+	msgh->msg_length = htonl(DIAMETER_PROTO_VERSION << 24 |
+				 (len & DIAMETER_LEN_MASK));
 }
 
 static msg_root_t *
@@ -416,7 +426,7 @@ avp_buffer_offset_update(avp_node_t *avps, int i, int delta)
 	int j;
 
 	/* Update parents AVP len */
-	avp_len_update_delta(avp->avph, delta, AVP_FL_VENDOR|AVP_FL_MANDATORY);
+	avp_len_update_delta(avp->avph, delta);
 
 	/* re-sync following buffer offset */
 	for (j = i+1; j < DIAMETER_MAX_APN_PARSED && avps[j].data; j++) {
@@ -694,7 +704,7 @@ avp_specific_apn_info_delete(avp_node_t *avp, pkt_buffer_t *pkt)
 
 	/* Update AVP header len accordingly */
 	if (delta)
-		avp_len_update_delta(avp->avph, delta, AVP_FL_VENDOR|AVP_FL_MANDATORY);
+		avp_len_update_delta(avp->avph, delta);
 
   end:
 	return delta;
