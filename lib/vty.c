@@ -1584,7 +1584,7 @@ vty_listen(thread_master_t *m, struct sockaddr_storage *addr)
 void
 vty_close(vty_t *vty)
 {
-	int i;
+	unsigned int i;
 
 	/* Cancel threads.*/
 	if (vty->t_read)
@@ -2032,7 +2032,8 @@ DEFUN(no_vty_line_listen,
 	struct sockaddr_storage addr;
 	thread_t *vty_serv_thread;
 	uint16_t port = 0;
-	int ret, i;
+	unsigned int i;
+	int ret;
 
 	if (argc < 2) {
 		vty_out(vty, "%% missing arguments%s", VTY_NEWLINE);
@@ -2146,7 +2147,7 @@ vty_config_write(vty_t *vty)
 {
 	struct sockaddr_storage *addr;
 	thread_t *vty_serv_thread;
-	int i;
+	unsigned int i;
 
 	vty_out(vty, "line vty%s", VTY_NEWLINE);
 

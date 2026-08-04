@@ -163,7 +163,7 @@ jhash_oaat(register ub1 *k, size_t s)
 {
 	register ub4 hash = JHASH_GOLDEN_RATIO;
 	const ub1 *cp;
-	int i = 0;
+	size_t i = 0;
 
 	for (cp = k; *cp && i < s; cp++, i++) {
 		hash += *cp;

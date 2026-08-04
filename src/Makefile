@@ -21,9 +21,21 @@
 
 CC	 ?= gcc
 INCLUDES = -Iinclude -I../lib -I../libbpf/src -I../libbpf/src/uapi
-CFLAGS	 = -g -O2 -ggdb $(INCLUDES) -Werror -Wall -Wunused -Wstrict-prototypes -D_GNU_SOURCE
+WARNINGS = -Werror -Wall -Wextra -Wno-unused-parameter -Wunused		\
+	   -Wstrict-prototypes -Wformat=2 -Wno-format-nonliteral	\
+	   -Wcast-align -Wduplicated-cond
+HARDENING = -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fPIE
+CFLAGS	 = -g -O2 -ggdb $(INCLUDES) $(WARNINGS) $(HARDENING) -D_GNU_SOURCE
 #DEFS	 = -D_DEBUG_
 DEFS	 =
+
+# make SANITIZE=1 builds unoptimised under ASan and UBSan. The optimiser can
+# inline a memcpy past the ASan interceptor, so this deliberately drops -O2.
+ifdef SANITIZE
+CFLAGS	 = -g -O0 $(INCLUDES) $(WARNINGS) -fsanitize=address,undefined \
+	   -fno-omit-frame-pointer -D_GNU_SOURCE
+endif
+
 COMPILE	 = $(CC) $(CFLAGS) $(DEFS)
 
 OBJS = 	main.o dra_data.o dra_disk.o dra_if.o dra_vty.o dra_htab.o		\

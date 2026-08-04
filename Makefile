@@ -33,7 +33,13 @@ init_script = etc/init.d/gtp-guard.init
 conf_file   = etc/gtp-guard/gtp-guard.conf
 
 CC        ?= gcc
-LDFLAGS   = -lpthread -lcrypt -ggdb -lm -lz -lresolv -lelf -lsctp -ldl -lpcap
+HARDENING = -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack
+LDFLAGS   = $(HARDENING) -lpthread -lcrypt -ggdb -lm -lz -lresolv -lelf -lsctp -ldl -lpcap
+
+ifdef SANITIZE
+LDFLAGS   = -fsanitize=address,undefined -lpthread -lcrypt -ggdb -lm -lz	\
+	    -lresolv -lelf -lsctp -ldl -lpcap
+endif
 SUBDIRS   = lib src src/bpf
 LIBBPF    = libbpf
 OBJDIR    = $(LIBBPF)/src

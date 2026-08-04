@@ -228,7 +228,7 @@ vector_free(vector_t *v)
 void
 vector_dump(vector_t *v)
 {
-	int i;
+	unsigned int i;
 
 	printf("Vector Size : %d (active:%d)\n", v->allocated, v->active);
 
@@ -244,7 +244,7 @@ vector_dump(vector_t *v)
 void
 free_strvec(vector_t *strvec)
 {
-	int i;
+	unsigned int i;
 	char *str;
 
 	if (!strvec)
@@ -262,7 +262,7 @@ free_strvec(vector_t *strvec)
 void
 dump_strvec(vector_t *strvec)
 {
-	int i;
+	unsigned int i;
 	char *str;
 
 	if (!strvec)

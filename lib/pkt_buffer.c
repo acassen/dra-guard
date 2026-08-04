@@ -210,7 +210,7 @@ mpkt_init(mpkt_t *mpkt, unsigned int vlen)
 void
 mpkt_process(mpkt_t *mpkt, unsigned int vlen, void (*process) (pkt_t *, void *), void *arg)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < vlen; i++)
 		(*process) (mpkt->pkt[i], arg);
@@ -219,7 +219,7 @@ mpkt_process(mpkt_t *mpkt, unsigned int vlen, void (*process) (pkt_t *, void *),
 static void
 mpkt_release(mpkt_t *mpkt)
 {
-	int i;
+	unsigned int i;
 	for (i=0; i < mpkt->vlen; i++) {
 		if (mpkt->pkt[i]) {
 			pkt_free(mpkt->pkt[i]);
@@ -241,7 +241,7 @@ static int
 mpkt_alloc(mpkt_t *mpkt, unsigned int size)
 {
 	pkt_t *pkt;
-	int i;
+	unsigned int i;
 
 	for (i=0; i < mpkt->vlen; i++) {
 		pkt = pkt_alloc(size);
@@ -256,7 +256,7 @@ mpkt_alloc(mpkt_t *mpkt, unsigned int size)
 static void
 mpkt_prepare(mpkt_t *mpkt)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < mpkt->vlen; i++) {
 		mpkt->iovecs[i].iov_base = mpkt->pkt[i]->pbuff->head;
@@ -269,7 +269,7 @@ mpkt_prepare(mpkt_t *mpkt)
 void
 mpkt_reset(mpkt_t *mpkt)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < mpkt->vlen; i++)
 		pkt_buffer_reset(mpkt->pkt[i]->pbuff);
@@ -279,7 +279,8 @@ int
 __pkt_queue_mget(pkt_queue_t *q, mpkt_t *mpkt)
 {
 	pkt_t *pkt, *_pkt;
-	int ret, i, idx = 0;
+	unsigned int i, idx = 0;
+	int ret;
 
 	if (list_empty(&q->queue)) {
 		ret = mpkt_alloc(mpkt, DEFAULT_PKT_BUFFER_SIZE);
@@ -332,7 +333,7 @@ int
 __pkt_queue_mput(pkt_queue_t *q, mpkt_t *mpkt)
 {
 	pkt_t *pkt;
-	int i;
+	unsigned int i;
 
 	for (i=0; i < mpkt->vlen; i++) {
 		pkt = mpkt->pkt[i];

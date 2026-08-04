@@ -47,7 +47,7 @@ bcd_to_int64(const uint8_t *buffer, size_t size)
 {
 	int64_t value = 0;
 	uint8_t high, low;
-	int i;
+	size_t i;
 
 	/* With bit swapping */
 	for (i = 0; i < size; i++) {

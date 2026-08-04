@@ -63,7 +63,7 @@ static int
 dra_bpf_nat_rule_set(struct ip_nat_rule *r, dra_nat_rule_t *r_nat)
 {
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < nr_cpus; i++) {
 		r[i].type = r_nat->type;
