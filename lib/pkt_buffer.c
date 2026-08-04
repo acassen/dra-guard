@@ -385,7 +385,7 @@ pkt_buffer_send(int fd, pkt_buffer_t *b, struct sockaddr_storage *addr)
 int
 pkt_buffer_put_zero(pkt_buffer_t *b, unsigned int size)
 {
-	if (pkt_buffer_tailroom(b) < size)
+	if ((ssize_t) size > pkt_buffer_tailroom(b))
 		return -1;
 
 	memset(b->end, 0, size);
@@ -396,9 +396,9 @@ pkt_buffer_put_zero(pkt_buffer_t *b, unsigned int size)
 int
 pkt_buffer_pad(pkt_buffer_t *b, unsigned int size)
 {
-	int len = pkt_buffer_len(b);
+	ssize_t len = pkt_buffer_len(b);
 
-	if (len >= size)
+	if (len >= (ssize_t) size)
 		return -1;
 
 	return pkt_buffer_put_zero(b, size - len);

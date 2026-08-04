@@ -51,27 +51,32 @@ typedef struct _pkt_queue {
 	list_head_t		queue;
 } pkt_queue_t;
 
-static inline unsigned int pkt_buffer_len(pkt_buffer_t *b)
+/*
+ * Lengths are signed. An inverted pointer pair then reads as negative rather
+ * than wrapping to a huge positive, which is what used to disarm every bounds
+ * check written as "if (pkt_buffer_tailroom(b) < n)".
+ */
+static inline ssize_t pkt_buffer_len(pkt_buffer_t *b)
 {
 	return b->end - b->head;
 }
 
-static inline unsigned int pkt_buffer_size(pkt_buffer_t *b)
+static inline ssize_t pkt_buffer_size(pkt_buffer_t *b)
 {
 	return b->tail - b->head;
 }
 
-static inline unsigned int pkt_buffer_headroom(pkt_buffer_t *b)
+static inline ssize_t pkt_buffer_headroom(pkt_buffer_t *b)
 {
 	return b->data - b->head;
 }
 
-static inline unsigned int pkt_buffer_tailroom(pkt_buffer_t *b)
+static inline ssize_t pkt_buffer_tailroom(pkt_buffer_t *b)
 {
 	return b->tail - b->end;
 }
 
-static inline unsigned int pkt_buffer_data_tailroom(pkt_buffer_t *b)
+static inline ssize_t pkt_buffer_data_tailroom(pkt_buffer_t *b)
 {
 	return b->end - b->data;
 }
@@ -91,24 +96,50 @@ static inline void pkt_buffer_reset_data(pkt_buffer_t *b)
 	b->data = b->head;
 }
 
-static inline void pkt_buffer_set_end_pointer(pkt_buffer_t *b, unsigned int offset)
+/*
+ * Every move is refused rather than applied blind, so a peer supplied length
+ * cannot walk end past the allocation. Callers that already know the value
+ * fits may ignore the result.
+ */
+static inline int pkt_buffer_set_end_pointer(pkt_buffer_t *b, unsigned int offset)
 {
+	if ((ssize_t) offset > pkt_buffer_size(b))
+		return -1;
+
 	b->end = b->head + offset;
+	return 0;
 }
 
-static inline void pkt_buffer_set_data_pointer(pkt_buffer_t *b, unsigned int offset)
+static inline int pkt_buffer_set_data_pointer(pkt_buffer_t *b, unsigned int offset)
 {
+	if ((ssize_t) offset > pkt_buffer_len(b))
+		return -1;
+
 	b->data = b->head + offset;
+	return 0;
 }
 
-static inline void pkt_buffer_put_data(pkt_buffer_t *b, unsigned int offset)
+/* offset is signed, callers shrink the packet with a negative delta */
+static inline int pkt_buffer_put_data(pkt_buffer_t *b, int offset)
 {
+	if (offset > pkt_buffer_data_tailroom(b))
+		return -1;
+	if (-offset > pkt_buffer_headroom(b))
+		return -1;
+
 	b->data += offset;
+	return 0;
 }
 
-static inline void pkt_buffer_put_end(pkt_buffer_t *b, unsigned int offset)
+static inline int pkt_buffer_put_end(pkt_buffer_t *b, int offset)
 {
+	if (offset > pkt_buffer_tailroom(b))
+		return -1;
+	if (-offset > pkt_buffer_len(b))
+		return -1;
+
 	b->end += offset;
+	return 0;
 }
 
 /* Prototypes */

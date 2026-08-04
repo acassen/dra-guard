@@ -128,7 +128,7 @@ dra_route_optimization(pkt_buffer_t *pkt, void *arg, dra_mip6_agent_info_t *stat
 	int delta, err;
 	uint32_t len;
 
-	if (pkt_buffer_len(pkt) < sizeof(msg_hdr_t))
+	if (pkt_buffer_len(pkt) < (ssize_t) sizeof(msg_hdr_t))
 		return -1;
 
 	if (DIAMETER_GET_ULONG(msgh->msg_code) != CC_3GPP_CMD_UL)

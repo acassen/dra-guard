@@ -313,7 +313,7 @@ avp_mip6_agent_info_replace(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buff
 	if (delta < 0) {
 		/* Bounds checking */
 		if (pkt_buffer_tailroom(pkt) < -delta) {
-			log_message(LOG_INFO, "%s(): Warning Bounds Check failed pkt_tailroom:%d delta:%d !!!"
+			log_message(LOG_INFO, "%s(): Warning Bounds Check failed pkt_tailroom:%zd delta:%d !!!"
 					    , __FUNCTION__
 					    , pkt_buffer_tailroom(pkt), -delta);
 			return 0;
@@ -368,7 +368,7 @@ avp_mip6_agent_info_insert(avp_node_t *avp, uint8_t *mip, int mip_len, pkt_buffe
 
 	/* Bounds checking */
 	if (pkt_buffer_tailroom(pkt) < mip_len + pdn_gw_alloc_type_len) {
-		log_message(LOG_INFO, "%s(): Warning Bounds Check failed pkt_tailroom:%d delta:%d !!!"
+		log_message(LOG_INFO, "%s(): Warning Bounds Check failed pkt_tailroom:%zd delta:%d !!!"
 					, __FUNCTION__
 					, pkt_buffer_tailroom(pkt)
 					, mip_len + pdn_gw_alloc_type_len);
