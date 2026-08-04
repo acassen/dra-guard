@@ -22,11 +22,14 @@
 #ifndef _LOGGER_H
 #define _LOGGER_H
 
+#include <stdarg.h>
 #include <syslog.h>
 
 void enable_console_log(void);
 void log_message(int, const char * , ...)
 	__attribute__ ((format (printf, 2, 3)));
+/* For callers handed a va_list by someone else, libbpf for one */
+void log_message_va(int, const char *, va_list);
 void conf_write(FILE *, const char *, ...)
 	__attribute__ ((format (printf, 2, 3)));
 

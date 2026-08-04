@@ -33,8 +33,8 @@ enable_console_log(void)
 	log_console = true;
 }
 
-static void
-log_vmessage(int facility, const char *format, va_list args)
+void
+log_message_va(int facility, const char *format, va_list args)
 {
 	char buf[256];
 
@@ -53,7 +53,7 @@ log_message(const int facility, const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	log_vmessage(facility, format, args);
+	log_message_va(facility, format, args);
 	va_end(args);
 }
 
@@ -67,7 +67,7 @@ conf_write(FILE *fp, const char *format, ...)
                 vfprintf(fp, format, args);
                 fprintf(fp, "\n");
         } else
-                log_vmessage(LOG_INFO, format, args);
+                log_message_va(LOG_INFO, format, args);
 
         va_end(args);
 }
