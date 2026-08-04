@@ -25,7 +25,7 @@
 #define LOG_FACILITY_MAX        7
 #define PROG                    "dra-guard"
 #define PROG_PID_FILE		"/var/run/dra-guard.pid"
-#define VERSION_STRING PROG	" v1.0.10 (2025/08/06)"
+#define VERSION_STRING PROG	" v1.1.0 (2026/08/04)"
 #define COPYRIGHT_STRING	"Copyright (C) 2024-2025 Alexandre Cassen, <acassen@gmail.com>"
 
 
