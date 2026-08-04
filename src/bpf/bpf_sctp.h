@@ -254,4 +254,30 @@ struct sctp_ipv4addr_param {
 	__be32 addr;
 } __attribute__ ((__packed__));
 
+
+/* Non zero fragment offset means the transport header is in another packet */
+#define IP_FRAG_OFFSET	0x1fff
+
+/*
+ * Both programs reach the transport header at a fixed offset and checksum a
+ * fixed length IPv4 header, so leave options and later fragments to the stack
+ * rather than rewriting at a guessed offset.
+ */
+static __always_inline int ip_is_simple(const struct iphdr *iph)
+{
+	if (iph->ihl != sizeof(struct iphdr) >> 2)
+		return 0;
+
+	return !(iph->frag_off & __constant_htons(IP_FRAG_OFFSET));
+}
+
+/* The ARP walk uses fixed offsets, which only hold for Ethernet over IPv4 */
+static __always_inline int arp_is_ipv4_ether(const struct arphdr *arph)
+{
+	return arph->ar_hrd == __constant_htons(ARPHRD_ETHER) &&
+	       arph->ar_pro == __constant_htons(ETH_P_IP) &&
+	       arph->ar_hln == ETH_ALEN &&
+	       arph->ar_pln == sizeof(__u32);
+}
+
 #endif

@@ -268,6 +268,9 @@ static __always_inline int arp_nat(struct xdp_md *ctx)
 	arph = data + offset;
 	if (arph + 1 > data_end)
 		return XDP_PASS;
+
+	if (!arp_is_ipv4_ether(arph))
+		return XDP_PASS;
 	offset += sizeof(struct arphdr) + ETH_ALEN;
 
 	if (data + offset + sizeof(__u32) > data_end)
@@ -313,6 +316,7 @@ int xdp_sctp_redirect(struct xdp_md *ctx)
 	struct ethhdr *ethh;
 	int offset = sizeof(struct ethhdr);
 	struct iphdr *iph;
+	int tot_len;
 
 	ethh = data;
 	if (ethh + 1 > data_end)
@@ -321,8 +325,15 @@ int xdp_sctp_redirect(struct xdp_md *ctx)
 	if (ethh->h_proto == __constant_htons(ETH_P_ARP))
 		return arp_nat(ctx);
 
+	/* Without this every other ethertype was parsed and rewritten as IPv4 */
+	if (ethh->h_proto != __constant_htons(ETH_P_IP))
+		return XDP_PASS;
+
 	iph = data + offset;
 	if (iph + 1 > data_end)
+		return XDP_PASS;
+
+	if (!ip_is_simple(iph))
 		return XDP_PASS;
 	offset += sizeof(*iph);
 
@@ -333,10 +344,15 @@ int xdp_sctp_redirect(struct xdp_md *ctx)
 	if (rule && (rule->type == DRA_IP_NAT_SRC_DST || rule->type == DRA_IP_NAT_SRC))
 		ip_nat(iph, rule);
 
-	if (iph->protocol == IPPROTO_SCTP)
-		return sctp_nat(ctx, offset, bpf_ntohs(iph->tot_len)-sizeof(struct iphdr));
+	if (iph->protocol != IPPROTO_SCTP)
+		return XDP_PASS;
 
-	return XDP_PASS;
+	/* A short tot_len used to make the checksum length go negative */
+	tot_len = bpf_ntohs(iph->tot_len);
+	if (tot_len < (int) sizeof(struct iphdr))
+		return XDP_PASS;
+
+	return sctp_nat(ctx, offset, tot_len - sizeof(struct iphdr));
 }
 
 char _license[] SEC("license") = "GPL";

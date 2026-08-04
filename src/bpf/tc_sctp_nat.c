@@ -268,6 +268,9 @@ static __always_inline int arp_nat(struct __sk_buff *skb)
 	arph = data + offset;
 	if (arph + 1 > data_end)
 		return TC_ACT_OK;
+
+	if (!arp_is_ipv4_ether(arph))
+		return TC_ACT_OK;
 	offset += sizeof(struct arphdr) + ETH_ALEN;
 
 	if (arph->ar_op != __constant_htons(ARPOP_REQUEST))
@@ -303,6 +306,7 @@ int tc_sctp_nat(struct __sk_buff *skb)
 	struct ethhdr *ethh;
 	int offset = sizeof(struct ethhdr);
 	struct iphdr *iph;
+	int tot_len;
 
 	if (skb->protocol == __constant_htons(ETH_P_ARP))
 		return arp_nat(skb);
@@ -317,6 +321,9 @@ int tc_sctp_nat(struct __sk_buff *skb)
 	iph = data + offset;
 	if (iph + 1 > data_end)
 		return TC_ACT_OK;
+
+	if (!ip_is_simple(iph))
+		return TC_ACT_OK;
 	offset += sizeof(*iph);
 
 	/*
@@ -326,10 +333,15 @@ int tc_sctp_nat(struct __sk_buff *skb)
 	if (rule && (rule->type == DRA_IP_NAT_SRC_DST || rule->type == DRA_IP_NAT_DST))
 		ip_nat(iph, rule);
 
-	if (iph->protocol == IPPROTO_SCTP)
-		return sctp_nat(skb, offset, bpf_ntohs(iph->tot_len)-sizeof(struct iphdr));
+	if (iph->protocol != IPPROTO_SCTP)
+		return TC_ACT_OK;
 
-	return TC_ACT_OK;
+	/* A short tot_len used to make the checksum length go negative */
+	tot_len = bpf_ntohs(iph->tot_len);
+	if (tot_len < (int) sizeof(struct iphdr))
+		return TC_ACT_OK;
+
+	return sctp_nat(skb, offset, tot_len - sizeof(struct iphdr));
 }
 
 char _license[] SEC("license") = "GPL";
