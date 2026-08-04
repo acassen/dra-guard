@@ -335,14 +335,16 @@ json_parse_array(const char **sp, json_node_t **out)
 
 	json_parser_skip_space(&s);
 
+	array = json_mkarray();
+	if (!array)
+		goto error;
+
+	/* An empty array is still a node, returning NULL here made the
+	 * enclosing container append a NULL child */
 	if (*s == ']') {
 		s++;
 		goto end;
 	}
-
-	array = json_mkarray();
-	if (!array)
-		goto error;
 
 	while (true) {
 		if (!json_parse_value(&s, &element))
@@ -381,15 +383,15 @@ json_parse_object(const char **sp, json_node_t **out)
 
 	json_parser_skip_space(&s);
 
+	obj = json_mkobject();
+	if (!obj)
+		goto error;
+
+	/* Same as the array, an empty object is still a node */
 	if (*s == '}') {
 		s++;
 		goto end;
 	}
-
-
-	obj = json_mkobject();
-	if (!obj)
-		return false;
 
 	while (true) {
 		if (!json_extract_string(&s, &key))
@@ -465,6 +467,11 @@ json_parse_value(const char **sp, json_node_t **out)
 	return false;
 
   end:
+	/* A parser reporting success without a node would have the caller
+	 * append NULL to its container */
+	if (!*out)
+		return false;
+
 	json_parser_skip_space(&s);
 	*sp = s;
 	return true;
