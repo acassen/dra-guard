@@ -1724,15 +1724,17 @@ vty_use_backup_config(char *fullpath)
 	}
   
 	close(sav);
-	close(tmp);
-  
-	if (chmod(fullpath_tmp, 0600) != 0) {
+
+	/* Act on the fd, a path based chmod invites a symlink swap */
+	if (fchmod(tmp, 0600) != 0) {
+		close(tmp);
 		unlink(fullpath_tmp);
 		FREE(fullpath_sav);
 		FREE(fullpath_tmp);
 		return NULL;
 	}
-  
+	close(tmp);
+
 	if (link(fullpath_tmp, fullpath) == 0)
 		ret = fopen(fullpath, "r");
 

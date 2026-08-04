@@ -2048,7 +2048,16 @@ DEFUN(config_write_file,
 			   , VTY_NEWLINE);
 		goto finished;
 	}
-  
+
+	/* Act on the fd before the file gets linked in place, a path based
+	 * chmod invites a symlink swap */
+	if (fchmod(fd, 0600) != 0) {
+		vty_out(vty, "Can't chmod configuration file %s: %s (%d).%s"
+			   , config_file_tmp, strerror(errno), errno, VTY_NEWLINE);
+		close(fd);
+		goto finished;
+	}
+
 	/* Make vty for configuration file. */
 	file_vty = vty_new();
 	file_vty->fd = fd;
@@ -2097,12 +2106,6 @@ DEFUN(config_write_file,
 	}
 
 	sync();
-  
-	if (chmod(config_file, 0600) != 0) {
-		vty_out(vty, "Can't chmod configuration file %s: %s (%d).%s" 
-			   , config_file, strerror(errno), errno, VTY_NEWLINE);
-		goto finished;
-	}
 
 	vty_out(vty, "Configuration saved to %s%s", config_file, VTY_NEWLINE);
 	ret = CMD_SUCCESS;
